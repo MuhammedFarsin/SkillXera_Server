@@ -258,6 +258,15 @@ const refreshToken = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
+const logout =  async (req, res) => {
+  try {
+    res.clearCookie('refreshToken')
+    res.status(200).json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+}
 module.exports = {
   signin,
   signup,
@@ -266,5 +275,6 @@ module.exports = {
   verifyMailForgetPassword,
   verifyOtpForgetPassword,
   resetPassword,
-  refreshToken
+  refreshToken,
+  logout
 };

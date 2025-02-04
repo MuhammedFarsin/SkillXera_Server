@@ -7,7 +7,8 @@ const {
   verifyMailForgetPassword,
   verifyOtpForgetPassword,
   resetPassword,
-  refreshToken
+  refreshToken,
+  logout
 } = require("../Controller/AuthController");
 const { authenticateAccessToken, authenticateRefreshToken } = require("../Middleware/jwtAuth");
 const userRoute = express.Router();
@@ -19,10 +20,9 @@ userRoute.post("/resend-otp", resendOtp);
 userRoute.post("/verify-mail-forget-password", verifyMailForgetPassword);
 userRoute.post("/verify-otp-forget-password", verifyOtpForgetPassword);
 
-// Protect the reset password route with access token
 userRoute.post("/reset-password", authenticateAccessToken, resetPassword);
 
-// Protect the refresh-token route with refresh token authentication
 userRoute.post("/refresh-token", authenticateRefreshToken, refreshToken);
+userRoute.post("/logout", logout);
 
 module.exports = userRoute;
