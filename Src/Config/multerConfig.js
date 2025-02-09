@@ -2,22 +2,21 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Path to the uploads folder
+// Define the upload directory inside the public folder
 const uploadDir = path.join(__dirname, '../../public/uploads');
 
-// Ensure that the uploads directory exists
+// Ensure the uploads directory exists
 if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true }); // Creates the folder if it doesn't exist
+  fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Use the uploads directory to store the file
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    // Set the filename to be the current timestamp and the original file name
-    cb(null, Date.now() + '-' + file.originalname);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname)); // Unique file name
   },
 });
 
