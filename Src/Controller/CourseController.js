@@ -2,6 +2,7 @@ const Course = require("../Model/CourseModel");
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
+const { cloudinary } = require("../Config/CloudinaryConfig");
 
 const getCourse = async (req, res) => {
   try {
@@ -191,13 +192,11 @@ const deleteModule = async (req, res) => {
         .json({ success: false, message: "Course not found" });
     }
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "Module deleted successfully",
-        updatedCourse,
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Module deleted successfully",
+      updatedCourse,
+    });
   } catch (error) {
     console.error("Error deleting module:", error);
     res.status(500).json({ message: "Internal Server Error" });
@@ -260,6 +259,223 @@ const updateModule = async (req, res) => {
   }
 };
 
+const getLectures = async (req, res) => {
+  try {
+    const { courseId, moduleId } = req.params;
+
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+    const module = course.modules.id(moduleId);
+    if (!module) {
+      return res.status(404).json({ message: "Module not found" });
+    }
+    res.status(200).json({
+      message: "Lectures retrieved successfully",
+      lectures: module.lectures,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+const addLecture = async (req, res) => {
+  try {
+    const { courseId, moduleId } = req.params;
+    const { title, description, duration } = req.body;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Video file is required" });
+    }
+
+    const videoPath = `/videos/${req.file.filename}`; // Relative path for frontend usage
+
+    // Find the course and module
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    const module = course.modules.id(moduleId);
+    if (!module) return res.status(404).json({ message: "Module not found" });
+
+    // Create new lecture entry
+    const newLecture = {
+      _id: new mongoose.Types.ObjectId(),
+      title,
+      description,
+      videoUrl: videoPath,
+      duration: Number(duration),
+      createdAt: new Date(),
+    };
+
+    module.lectures.push(newLecture);
+    await course.save();
+
+    res.status(201).json({
+      message: "Lecture added successfully",
+      lecture: newLecture,
+    });
+  } catch (error) {
+    console.error("❌ Error adding lecture:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+
+const deleteLecture = async (req, res) => {
+  try {
+    const { courseId, moduleId, lectureId } = req.params;
+
+    // Find the course
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    // Find the module inside the course
+    const module = course.modules.id(moduleId);
+    if (!module) return res.status(404).json({ message: "Module not found" });
+
+    // Find the lecture inside the module
+    const lectureIndex = module.lectures.findIndex(
+      (lecture) => lecture._id.toString() === lectureId
+    );
+
+    if (lectureIndex === -1) {
+      return res.status(404).json({ message: "Lecture not found" });
+    }
+
+    // Get video file path before deleting lecture
+    const videoPath = module.lectures[lectureIndex].videoUrl; // Assuming `videoUrl` stores the file path
+    // Remove the lecture from the module
+    module.lectures.splice(lectureIndex, 1);
+
+    // Save the updated course
+    await course.save();
+
+    // Delete the video file from local storage
+    if (videoPath) {
+      const absolutePath = path.join(__dirname, "../../public", videoPath); // Adjust based on your storage directory
+
+      fs.unlink(absolutePath, (err) => {
+        if (err) {
+          console.error("Failed to delete video file:", err);
+        } else {
+          console.log("Video file deleted successfully");
+        }
+      });
+    }
+
+    res.status(200).json({ message: "Lecture and video file deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting lecture:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+
+const getEditLecture = async (req, res) => {
+  try {
+    const { courseId, moduleId, lectureId } = req.params;
+    
+    // Find the course
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    // Find the module inside the course
+    const module = course.modules.id(moduleId);
+    if (!module) return res.status(404).json({ message: "Module not found" });
+
+    // Find the lecture inside the module
+    const lecture = module.lectures.id(lectureId);
+    if (!lecture) return res.status(404).json({ message: "Lecture not found" });
+
+    // Return the lecture data
+    res.status(200).json(lecture);
+  } catch (error) {
+    res.status(500).json({ message: "Internal Server Error", error: error.message });
+  }
+};
+const EditLecture = async ( req, res ) => {
+  try {
+    const { courseId, moduleId, lectureId } = req.params;
+    const { title, description, duration } = req.body;
+
+    // Find the course
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    // Find the module inside the course
+    const module = course.modules.id(moduleId);
+    if (!module) return res.status(404).json({ message: "Module not found" });
+
+    // Find the lecture inside the module
+    const lecture = module.lectures.id(lectureId);
+    if (!lecture) return res.status(404).json({ message: "Lecture not found" });
+
+    // Update lecture fields
+    lecture.title = title || lecture.title;
+    lecture.description = description || lecture.description;
+    lecture.duration = duration || lecture.duration;
+
+    // If a new video is uploaded, delete the old one and update the path
+    if (req.file) {
+      if (lecture.videoUrl) {
+        const oldPath = path.join("uploads/videos/", lecture.videoUrl);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+      }
+      lecture.videoUrl = req.file.filename;
+    }
+
+    await course.save(); // Save the updated course document
+
+    res.status(200).json({
+      message: "Lecture updated successfully",
+      lecture,
+      moduleId
+    });
+  } catch (error) {
+    console.error("Edit Lecture Error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+const getModuleLecture = async (req, res) => {
+  try {
+    const { courseId, moduleId, lectureIndex } = req.params;
+
+    // Find the course
+    const course = await Course.findById(courseId);
+    if (!course || !course.modules || course.modules.length === 0) {
+      return res.status(404).json({ message: "Course or modules not found" });
+    }
+
+    // Find the module
+    const module = course.modules.find(mod => mod._id.toString() === moduleId);
+    if (!module) return res.status(404).json({ message: "Module not found" });
+
+    // Validate lectureIndex
+    const index = parseInt(lectureIndex);
+    if (isNaN(index) || index < 0 || index >= module.lectures.length) {
+      return res.status(400).json({ message: "Invalid lecture index" });
+    }
+
+    // Get the requested lecture
+    const lecture = module.lectures[index];
+    if (!lecture) return res.status(404).json({ message: "Lecture not found" });
+
+    // Return the entire module's lectures along with the current lecture index
+    res.status(200).json({ lectures: module.lectures, currentIndex: index });
+
+  } catch (error) {
+    console.error("Get Lecture Video Error:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+
+
+
 module.exports = {
   getCourse,
   createCourse,
@@ -270,5 +486,11 @@ module.exports = {
   addModule,
   deleteModule,
   getEditModule,
-  updateModule
+  updateModule,
+  getLectures,
+  addLecture,
+  deleteLecture,
+  getEditLecture,
+  EditLecture,
+  getModuleLecture
 };

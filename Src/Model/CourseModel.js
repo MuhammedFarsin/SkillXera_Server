@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const lectureSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: { type: String },
-  videoUrl: { type: String },
+  videoUrl: { type: String, required: true },
   resources: [{ type: String }],
   duration: { type: Number },
   createdAt: { type: Date, default: Date.now },
