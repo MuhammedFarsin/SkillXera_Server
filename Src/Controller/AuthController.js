@@ -7,6 +7,7 @@ const {
 } = require("../Config/jwtConfig");
 const sendOtpMail = require("../Utils/sendMail");
 const dotenv = require("dotenv");
+const Contact = require("../Model/ContactModel");
 
 const tempUsers = {};
 
@@ -57,6 +58,7 @@ const signup = async (req, res) => {
     if (existingUser) {
       return res.status(400).json({ message: "User already exists!" });
     }
+    
 
     console.log(password !== confirmPassword);
     if (password !== confirmPassword) {
@@ -115,6 +117,22 @@ const verifyOtp = async (req, res) => {
     });
 
     await newUser.save();
+    let existingContact = await Contact.findOne({ email });
+
+    if (existingContact) {
+      // If a contact exists, update it to link with the new user
+      existingContact.user = newUser._id;
+      await existingContact.save();
+    } else {
+      // Otherwise, create a new contact
+      existingContact = new Contact({
+        username: tempUsers[email].username,
+        email: tempUsers[email].email,
+        phone: tempUsers[email].phone,
+        user: newUser._id,
+      });
+      await existingContact.save();
+    }
 
     const accessToken = generateAccessToken(newUser);
     const refreshToken = generateRefreshToken(newUser);
@@ -124,6 +142,7 @@ const verifyOtp = async (req, res) => {
     return res.status(201).json({
       message: "User registered successfully!",
       user: newUser,
+      contact: existingContact,
       accessToken,
       refreshToken,
     });

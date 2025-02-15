@@ -20,12 +20,11 @@ const {
   EditLecture,
   getModuleLecture
 } = require("../Controller/CourseController");
-// const {
-//   authenticateAccessToken,
-//   authenticateRefreshToken,
-// } = require("../Middleware/jwtAuth");
 
-// Get all courses
+const { getContacts,addContact, deleteContact, getTags , addTag, deleteTag, getEditTag ,editTag} = require("../Controller/CrmController")
+
+
+// Get all courses...
 adminRoute.get("/assets/get-courses", getCourse);
 adminRoute.post("/assets/add-course", upload.array("images", 3), createCourse);
 adminRoute.delete("/assets/delete-course/:Id", deleteCourse);
@@ -35,7 +34,8 @@ adminRoute.put(
   upload.array("images", 3),
   updateCourse
 );
-//Module
+
+//Module...
 adminRoute.get("/assets/courses/get-modules/:courseId", getModules);
 adminRoute.post("/assets/course/add-module/:courseId", addModule);
 adminRoute.delete(
@@ -44,13 +44,28 @@ adminRoute.delete(
 );
 adminRoute.get("/assets/course/edit-module/:courseId/:moduleId", getEditModule);
 adminRoute.put("/assets/course/edit-module/:courseId/:moduleId", updateModule);
-//Lecture
+
+//Lecture...
 adminRoute.get("/assets/courses/get-lectures/:courseId/:moduleId", getLectures);
 adminRoute.post('/assets/courses/add-lecture/:courseId/:moduleId', videoUpload.single('video'),addLecture );
 adminRoute.delete("/assets/courses/delete-lecture/:courseId/:moduleId/:lectureId", deleteLecture)
 adminRoute.get("/assets/courses/get-lecture/:courseId/:moduleId/:lectureId", getEditLecture)
 adminRoute.put("/assets/courses/edit-lecture/:courseId/:moduleId/:lectureId",videoUpload.single("video") ,EditLecture)
 
+//View-Lectures...
 adminRoute.get("/assets/courses/watch-lecture/:courseId/:moduleId/:lectureIndex", getModuleLecture)
+
+//Contacts...
+adminRoute.get("/crm/contact/get-contacts", getContacts )
+adminRoute.post("/crm/contact/add-contact", addContact )
+adminRoute.delete("/crm/contact/delete-contact", deleteContact )
+
+
+//Tags...
+adminRoute.get("/crm/tag/get-tags", getTags )
+adminRoute.post("/crm/tag/add-tag", addTag)
+adminRoute.get("/crm/tag/get-edit-tag/:tagId", getEditTag)
+adminRoute.put("/crm/tag/edit-tag/:tagId", editTag)
+adminRoute.delete("/crm/tag/delete-tag/:tagId", deleteTag)
 
 module.exports = adminRoute;
