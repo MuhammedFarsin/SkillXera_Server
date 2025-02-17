@@ -1,6 +1,6 @@
 const express = require("express");
 const adminRoute = express.Router();
-const {videoUpload }= require("../Config/CloudinaryConfig")
+const { videoUpload } = require("../Config/CloudinaryConfig");
 const upload = require("../Config/multerConfig");
 const {
   getCourse,
@@ -18,11 +18,24 @@ const {
   deleteLecture,
   getEditLecture,
   EditLecture,
-  getModuleLecture
+  getModuleLecture,
 } = require("../Controller/CourseController");
 
-const { getContacts,addContact, deleteContact, getTags , addTag, deleteTag, getEditTag ,editTag} = require("../Controller/CrmController")
-
+const {
+  getContacts,
+  addContact,
+  deleteContact,
+  addContactTag,
+  getTags,
+  addTag,
+  deleteTag,
+  getEditTag,
+  editTag,
+  removeContactTag,
+  getRemovingTag,
+  getEditContact,
+  EditContact
+} = require("../Controller/CrmController");
 
 // Get all courses...
 adminRoute.get("/assets/get-courses", getCourse);
@@ -47,25 +60,46 @@ adminRoute.put("/assets/course/edit-module/:courseId/:moduleId", updateModule);
 
 //Lecture...
 adminRoute.get("/assets/courses/get-lectures/:courseId/:moduleId", getLectures);
-adminRoute.post('/assets/courses/add-lecture/:courseId/:moduleId', videoUpload.single('video'),addLecture );
-adminRoute.delete("/assets/courses/delete-lecture/:courseId/:moduleId/:lectureId", deleteLecture)
-adminRoute.get("/assets/courses/get-lecture/:courseId/:moduleId/:lectureId", getEditLecture)
-adminRoute.put("/assets/courses/edit-lecture/:courseId/:moduleId/:lectureId",videoUpload.single("video") ,EditLecture)
+adminRoute.post(
+  "/assets/courses/add-lecture/:courseId/:moduleId",
+  videoUpload.single("video"),
+  addLecture
+);
+adminRoute.delete(
+  "/assets/courses/delete-lecture/:courseId/:moduleId/:lectureId",
+  deleteLecture
+);
+adminRoute.get(
+  "/assets/courses/get-lecture/:courseId/:moduleId/:lectureId",
+  getEditLecture
+);
+adminRoute.put(
+  "/assets/courses/edit-lecture/:courseId/:moduleId/:lectureId",
+  videoUpload.single("video"),
+  EditLecture
+);
 
 //View-Lectures...
-adminRoute.get("/assets/courses/watch-lecture/:courseId/:moduleId/:lectureIndex", getModuleLecture)
+adminRoute.get(
+  "/assets/courses/watch-lecture/:courseId/:moduleId/:lectureIndex",
+  getModuleLecture
+);
 
 //Contacts...
-adminRoute.get("/crm/contact/get-contacts", getContacts )
-adminRoute.post("/crm/contact/add-contact", addContact )
-adminRoute.delete("/crm/contact/delete-contact", deleteContact )
-
+adminRoute.get("/crm/contact/get-contacts", getContacts);
+adminRoute.post("/crm/contact/add-contact", addContact);
+adminRoute.delete("/crm/contact/delete-contact", deleteContact);
+adminRoute.post("/crm/contact/set-tag", addContactTag);
+adminRoute.get("/crm/contact/:id", getRemovingTag);
+adminRoute.delete("/crm/contact/remove-tag", removeContactTag);
+adminRoute.get("/crm/contact/get-contact/:contactId", getEditContact)
+adminRoute.put("/crm/contact/update-contact/:contactId", EditContact)
 
 //Tags...
-adminRoute.get("/crm/tag/get-tags", getTags )
-adminRoute.post("/crm/tag/add-tag", addTag)
-adminRoute.get("/crm/tag/get-edit-tag/:tagId", getEditTag)
-adminRoute.put("/crm/tag/edit-tag/:tagId", editTag)
-adminRoute.delete("/crm/tag/delete-tag/:tagId", deleteTag)
+adminRoute.get("/crm/tag/get-tags", getTags);
+adminRoute.post("/crm/tag/add-tag", addTag);
+adminRoute.get("/crm/tag/get-edit-tag/:tagId", getEditTag);
+adminRoute.put("/crm/tag/edit-tag/:tagId", editTag);
+adminRoute.delete("/crm/tag/delete-tag/:tagId", deleteTag);
 
 module.exports = adminRoute;
