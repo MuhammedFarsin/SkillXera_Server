@@ -14,23 +14,20 @@ const getCourse = async (req, res) => {
 };
 const createCourse = async (req, res) => {
   try {
-    const { title, description, route, price } = req.body;
+    const { title, description, route, buyCourse, price } = req.body;
+    
+    console.log("Uploaded Files:", req.files);
 
-    if (
-      !title ||
-      !description ||
-      !route ||
-      !price ||
-      !req.files ||
-      req.files.length < 3
-    ) {
-      return res
-        .status(400)
-        .json({ message: "All fields and at least 3 images are required" });
+    if (!title || !description || !route || !buyCourse || !price || !req.files || !req.files.images || !req.files.video) {
+      return res.status(400).json({ message: "All fields, at least 3 images, and a video are required" });
     }
 
-    // Store only relative paths in MongoDB (avoiding absolute paths)
-    const imagePaths = req.files.map((file) => `/uploads/${file.filename}`);
+    // Store image and video paths
+    const imagePaths = req.files.images.map((file) => `/uploads/${file.filename}`);
+    const videoPath = `/videos/${req.files.video[0].filename}`; // Get first video file
+
+    console.log("Image Paths:", imagePaths);
+    console.log("Video Path:", videoPath);
 
     // Check if the course already exists
     const existingCourse = await Course.findOne({ title });
@@ -43,17 +40,20 @@ const createCourse = async (req, res) => {
       title,
       description,
       route,
+      buyCourse,
       price,
       images: imagePaths,
+      video: videoPath,
     });
 
     const course = await newCourse.save();
-
     res.status(201).json({ message: "Course saved successfully", course });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
+
+
 
 const deleteCourse = async (req, res) => {
   try {
@@ -77,12 +77,20 @@ const getEditCourse = async (req, res) => {
 };
 
 const updateCourse = async (req, res) => {
+  console.log('this is calling');
+
   try {
     const { course } = req.params;
-    const { title, route, price, description, existingImages } = req.body;
-    const imageFiles = req.files;
+    const { title, route, buyCourse, price, description, existingImages, existingVideos } = req.body;
 
-    if (!title || !route || !price || !description) {
+    // Ensure files exist before accessing them
+    const imageFiles = req.files?.images || []; // Default to empty array if no images uploaded
+    const videoFiles = req.files?.video || []; // Default to empty array if no videos uploaded
+
+    console.log('Processed image files:', imageFiles);
+    console.log('Processed video files:', videoFiles);
+
+    if (!title || !route || !buyCourse || !price || !description) {
       return res.status(400).json({ message: "All fields are required!" });
     }
 
@@ -91,33 +99,35 @@ const updateCourse = async (req, res) => {
       return res.status(404).json({ message: "Course not found!" });
     }
 
-    let parsedExistingImages = [];
-    if (existingImages) {
-      try {
-        parsedExistingImages = JSON.parse(existingImages);
-      } catch (error) {
-        console.error("Error parsing existingImages:", error);
-      }
+    // Parse existing images and videos from request (if sent as JSON string)
+    let parsedExistingImages = existingImages ? JSON.parse(existingImages) : existingCourse.images || [];
+    let parsedExistingVideos = existingVideos ? JSON.parse(existingVideos) : existingCourse.video || "";
+
+    // If new images are uploaded, replace them; otherwise, keep existing ones
+    const newImagePaths = imageFiles.length > 0 
+      ? imageFiles.map((file) => `/uploads/${file.filename}`)
+      : parsedExistingImages;
+
+    // If new videos are uploaded, replace them; otherwise, keep existing one (as a string)
+    let newVideoPath = parsedExistingVideos; // Keep existing video if no new video is uploaded
+    if (videoFiles.length > 0) {
+      newVideoPath = `/videos/${videoFiles[0].filename}`; // Only store first video as string
     }
 
-    const newImagePaths = imageFiles.map((file) => `/uploads/${file.filename}`);
-
-    const updatedImages = [...parsedExistingImages, ...newImagePaths];
-
+    // Update the course
     const updatedCourse = await Course.findByIdAndUpdate(
       course,
-      { title, route, price, description, images: updatedImages },
+      { title, route, buyCourse, price, description, images: newImagePaths, video: newVideoPath },
       { new: true }
     );
 
-    res
-      .status(200)
-      .json({ message: "Course updated successfully!", course: updatedCourse });
+    res.status(200).json({ message: "Course updated successfully!", course: updatedCourse });
   } catch (error) {
     console.error("Error updating course:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
 
 const getModules = async (req, res) => {
   try {

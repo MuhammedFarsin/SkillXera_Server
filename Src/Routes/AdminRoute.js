@@ -1,7 +1,6 @@
 const express = require("express");
 const adminRoute = express.Router();
-const { videoUpload } = require("../Config/CloudinaryConfig");
-const upload = require("../Config/multerConfig");
+const uploadMiddleware = require("../Config/CloudinaryConfig")
 const {
   getCourse,
   createCourse,
@@ -39,12 +38,12 @@ const {
 
 // Get all courses...
 adminRoute.get("/assets/get-courses", getCourse);
-adminRoute.post("/assets/add-course", upload.array("images", 3), createCourse);
+adminRoute.post("/assets/add-course", uploadMiddleware, createCourse);
 adminRoute.delete("/assets/delete-course/:Id", deleteCourse);
 adminRoute.get("/assets/edit-course/:id", getEditCourse);
 adminRoute.put(
   "/assets/update-course/:course",
-  upload.array("images", 3),
+  uploadMiddleware,
   updateCourse
 );
 
@@ -62,7 +61,7 @@ adminRoute.put("/assets/course/edit-module/:courseId/:moduleId", updateModule);
 adminRoute.get("/assets/courses/get-lectures/:courseId/:moduleId", getLectures);
 adminRoute.post(
   "/assets/courses/add-lecture/:courseId/:moduleId",
-  videoUpload.single("video"),
+  uploadMiddleware,
   addLecture
 );
 adminRoute.delete(
@@ -75,7 +74,7 @@ adminRoute.get(
 );
 adminRoute.put(
   "/assets/courses/edit-lecture/:courseId/:moduleId/:lectureId",
-  videoUpload.single("video"),
+  uploadMiddleware,
   EditLecture
 );
 

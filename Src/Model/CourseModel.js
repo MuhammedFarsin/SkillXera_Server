@@ -20,7 +20,9 @@ const courseSchema = new mongoose.Schema({
   description: { type: String },
   images: { type: [String], required: true },
   route : { type: String, required: true },
+  buyCourse : { type: String, required: true },
   price: { type: Number, default: 0 },
+  video: { type: String, required: true }, 
   customer: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   modules: [moduleSchema],
   status: {

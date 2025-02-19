@@ -1,5 +1,6 @@
 const Contact = require("../Model/ContactModel");
 const Tag = require("../Model/TagModel");
+const mongoose = require("mongoose")
 
 const getContacts = async (req, res) => {
   try {
@@ -69,7 +70,6 @@ const getEditContact = async (req, res) => {
 
 const EditContact = async (req, res) => {
   try {
-    console.log("this is calling")
     const contactId = req.params.contactId;
     const { username, email, phone, tags } = req.body;
 
@@ -81,7 +81,7 @@ const EditContact = async (req, res) => {
       contactId,
       { username, email, phone, tags },
       { new: true, runValidators: true }
-    );
+    ).populate("tags");
 
     if (!updatedContact) {
       return res.status(404).json({ message: "Contact not found" });
@@ -129,7 +129,7 @@ const addContactTag = async (req, res) => {
 
     // Attach tag if not already present
     await Contact.findByIdAndUpdate(contactId, { $push: { tags: tag._id } });
-
+    console.log(tag)
     res.status(200).json({ message: "Tag attached successfully!", tag });
 
   } catch (error) {

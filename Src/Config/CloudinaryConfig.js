@@ -2,44 +2,58 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-// Define the upload directory
-const uploadDir = path.join(__dirname, "../../public/videos");
+// Define upload directories
+const imageUploadDir = path.join(__dirname, "../../public/uploads");
+const videoUploadDir = path.join(__dirname, "../../public/videos");
 
-// Ensure the upload directory exists
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// Ensure upload directories exist
+if (!fs.existsSync(imageUploadDir)) fs.mkdirSync(imageUploadDir, { recursive: true });
+if (!fs.existsSync(videoUploadDir)) fs.mkdirSync(videoUploadDir, { recursive: true });
 
 // Helper function to sanitize file names
 const sanitizeFileName = (fileName) => {
-  // Replace special characters and spaces with underscores
   return fileName.replace(/[^a-zA-Z0-9.-]/g, "_");
 };
 
-// Configure Multer for disk storage
+// Storage configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadDir); // Save files in the upload directory
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, imageUploadDir);
+    } else if (file.mimetype.startsWith("video/")) {
+      cb(null, videoUploadDir);
+    } else {
+      cb(new Error("Invalid file type!"), false);
+    }
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname); // Get the file extension
-    const baseName = sanitizeFileName(path.basename(file.originalname, ext)); // Sanitize the base name
-    cb(null, `${baseName}-${uniqueSuffix}${ext}`); // Generate a unique file name
+    const ext = path.extname(file.originalname);
+    const baseName = sanitizeFileName(path.basename(file.originalname, ext));
+    cb(null, `${baseName}-${uniqueSuffix}${ext}`);
   },
 });
 
-// Configure Multer middleware
-const videoUpload = multer({
+// Multer middleware for handling both images and videos
+const upload = multer({
   storage,
-  limits: { fileSize: 5000 * 1024 * 1024 }, // Allow up to 5GB files
+  limits: { fileSize: 5000 * 1024 * 1024 }, // 5GB max for videos
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ["video/mp4", "video/mkv", "video/avi", "video/mov"];
-    if (!allowedTypes.includes(file.mimetype)) {
-      return cb(new Error("Invalid file type. Only MP4, MKV, AVI, and MOV videos are allowed!"), false);
+    const allowedImages = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    const allowedVideos = ["video/mp4", "video/mkv", "video/avi", "video/mov"];
+
+    if (allowedImages.includes(file.mimetype) || allowedVideos.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type!"), false);
     }
-    cb(null, true);
   },
 });
 
-module.exports = { videoUpload };
+// Handle multiple files (both images and videos)
+const uploadMiddleware = upload.fields([
+  { name: "images", maxCount: 5 },
+  { name: "video", maxCount: 1 },
+]);
+
+module.exports = uploadMiddleware;
