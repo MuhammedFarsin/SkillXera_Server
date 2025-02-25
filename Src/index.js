@@ -4,6 +4,7 @@ const connectDB = require("./Config/dbConnect");
 const userRoute = require("./Routes/UserRoute")
 const adminRoute = require("./Routes/AdminRoute")
 const saleRoute = require("./Routes/SaleRoute")
+
 const cors = require("cors");
 const cookieParser = require("cookie-parser")
 const path = require('path');
