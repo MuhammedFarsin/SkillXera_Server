@@ -286,6 +286,45 @@ const logout =  async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 }
+const setPassword = async ( req, res ) => {
+  try {
+    const { email, token, newPassword } = req.body;
+    console.log(req.body)
+    // Validate input
+    if (!email || !token || !newPassword) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+    
+    // Find user with the token and check if it's expired
+    const user = await User.findOne({
+      email,
+      passwordResetToken: token,
+      passwordResetExpires: { $gt: Date.now() }, // Ensure token is not expired
+    });
+    
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    // Hash the new password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+
+    // Clear reset token fields
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+
+    // Save the updated user
+    await user.save();
+
+    res.status(200).json({ message: "Password reset successfully. You can now log in." });
+  } catch (error) {
+    res
+    .status(500)
+    .json({ message : "Internal Server Error..." })
+  }
+}
 module.exports = {
   signin,
   signup,
@@ -295,5 +334,6 @@ module.exports = {
   verifyOtpForgetPassword,
   resetPassword,
   refreshToken,
-  logout
+  logout,
+  setPassword
 };

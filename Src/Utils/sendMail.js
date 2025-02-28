@@ -1,5 +1,7 @@
 const nodemailer = require("nodemailer");
 const dotenv = require("dotenv");
+const crypto = require("crypto"); // ✅ Import crypto module
+
 dotenv.config();
 
 const transporter = nodemailer.createTransport({
@@ -33,22 +35,53 @@ const sendOtpEmail = async (toEmail, otp) => {
   }
 };
 
-const sendPaymentSuccessEmail = async (toEmail, courseDetails, paymentId) => {
-  console.log(courseDetails)
+const sendPaymentSuccessEmail = async (user, toEmail, courseDetails, paymentId) => {
+  console.log(user);
+
   try {
+    let additionalContent = "";
+
+    if (!user.password) {
+      // Generate reset token
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const resetTokenExpires = Date.now() + 15 * 60 * 1000; // 15 minutes expiry
+      console.log(resetToken)
+      console.log(resetTokenExpires)
+      // Save token in database
+      user.passwordResetToken = resetToken;
+      user.passwordResetExpires = resetTokenExpires;
+      await user.save();
+
+      // Set-password link
+      const resetLink = `${process.env.FRONTEND_URL}/set-password?token=${resetToken}&email=${toEmail}`;
+
+      additionalContent = `
+        <p><b>Important: Set Up Your Password!</b></p>
+        <p>You now have access to <b>${courseDetails.title}</b>, but before you can start learning, you need to <b>set up a password</b> for secure login.</p>
+        <p><a href="${resetLink}" style="color: #007bff; font-weight: bold;">Click here to set your password</a> and begin your journey.</p>
+        <p>This step is required to ensure a smooth and secure experience.</p>
+      `;
+    } else {
+      additionalContent = `
+        <p><b>You're all set! 🚀</b></p>
+        <p>You can access your course anytime by clicking the link below:</p>
+        <p><a href="${process.env.FRONTEND_URL}/home" style="color: #007bff; font-weight: bold;">Start Learning Now</a></p>
+      `;
+    }
+
     const mailOptions = {
       from: process.env.MAIL,
       to: toEmail,
-      subject: "Payment Successful - Course Access Details",
+      subject: "Course Access - Start Learning Now!",
       html: `
         <h3><span style='color: #23a925;'>SkillXera</span></h3>
-        <h5>Congratulations! 🎉 Your payment was successful.</h5>
-        <p><b>Course Name:</b> ${courseDetails.title}</p>
-        <p><b>Description:</b> ${courseDetails.description}</p>
-        <p><b>Course Link:</b> <a href="${courseDetails.route}">Click here to access</a></p>
+        <h5>🎉 Congratulations! Your payment was successful.</h5>
+        <p>You have successfully purchased <b>${courseDetails.title}</b>.</p>
+        <p><b>Course Description:</b> ${courseDetails.description}</p>
         <p><b>Payment ID:</b> ${paymentId}</p>
         <br/>
-        <p>Thank you for choosing SkillXera!</p>
+        ${additionalContent}
+        <p>We’re excited to have you onboard! 🚀</p>
       `,
     };
 
@@ -61,5 +94,6 @@ const sendPaymentSuccessEmail = async (toEmail, courseDetails, paymentId) => {
   }
 };
 
-module.exports = { sendOtpEmail, sendPaymentSuccessEmail };
 
+
+module.exports = { sendOtpEmail, sendPaymentSuccessEmail };

@@ -2,9 +2,7 @@ const { verifyAccessToken, verifyRefreshToken } = require('../Config/jwtConfig')
 
 // Middleware to authenticate access token
 const authenticateAccessToken = (req, res, next) => {
-  console.log("Authorization Header:", req.headers.authorization);
   const token = req.header("Authorization")?.replace("Bearer ", "");
-  console.log('this authenticateAccessToken :',token);
   if (!token) {
     return res.status(401).json({ message: "Access token is required" });
   } 

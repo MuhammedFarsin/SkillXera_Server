@@ -1,4 +1,6 @@
 const Course = require("../Model/CourseModel");
+const Purchase = require("../Model/PurchaseModal")
+const User = require("../Model/UserModel")
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
@@ -483,6 +485,59 @@ const getModuleLecture = async (req, res) => {
   }
 };
 
+const getUserCourse = async ( req, res ) => {
+  try {
+    const { userId } = req.params;
+
+    // Find the user and get their latest order ID
+    const user = await User.findById(userId);
+    if (!user || !user.orders.length) {
+      return res.status(404).json({ message: "No orders found for this user" });
+    }
+
+    const latestOrderId = user.orders[user.orders.length - 1]; // Get the latest order
+
+    // Find the payment record using the order ID
+    const payment = await Purchase.findOne({ cashfree_order_id: latestOrderId, status: "Success" });
+    if (!payment) {
+      return res.status(404).json({ message: "No successful payment found for this order" });
+    }
+
+    // Find the course details using the course ID from the payment record
+    const course = await Course.findById(payment.courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    res.status(200).json({ course });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching user course details", error });
+  }
+}
+
+const userCourse = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    if (!courseId) {
+      return res.status(400).json({ message: "CourseId not found..!" });
+    }
+
+    const course = await Course.findById(courseId);
+
+    if (!course) {
+      return res.status(404).json({ message: "Course not found...!" });
+    }
+
+    return res.status(200).json({ course });
+
+  } catch (error) {
+    console.error("Error fetching course:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+
 
 
 
@@ -502,5 +557,7 @@ module.exports = {
   deleteLecture,
   getEditLecture,
   EditLecture,
-  getModuleLecture
+  getModuleLecture,
+  getUserCourse,
+  userCourse
 };
