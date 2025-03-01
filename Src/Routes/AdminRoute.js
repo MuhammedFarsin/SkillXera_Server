@@ -36,8 +36,11 @@ const {
   EditContact
 } = require("../Controller/CrmController");
 
-const { getPayments, deleteTransaction } = require("../Controller/SaleController")
+const { getPayments, deleteTransaction, resendAccessCouseLink, dashboard } = require("../Controller/SaleController")
 
+
+// Dashboard
+adminRoute.get("/sales-data", dashboard)
 // Get all courses...
 adminRoute.get("/assets/get-courses", getCourse);
 adminRoute.post("/assets/add-course", uploadMiddleware, createCourse);
@@ -106,5 +109,6 @@ adminRoute.delete("/crm/tag/delete-tag/:tagId", deleteTag);
 //transaction
 adminRoute.get("/payments", getPayments)
 adminRoute.delete("/sales/transaction/delete-transaction", deleteTransaction)
+adminRoute.post("/sales/transaction/resend-transaction-mail", resendAccessCouseLink)
 
 module.exports = adminRoute;

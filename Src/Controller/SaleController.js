@@ -16,6 +16,28 @@ if (!process.env.CASHFREE_CLIENT_ID || !process.env.CASHFREE_CLIENT_SECRET) {
 
 const CASHFREE_BASE_URL = "https://sandbox.cashfree.com/pg/orders"; // Sandbox URL
 
+const dashboard = async (req, res) => {
+  try {
+    // Fetch order statistics
+    const totalOrders = await Payment.countDocuments();
+    const totalRevenue = await Payment.aggregate([
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]);
+
+    // Fetch latest orders
+    const recentOrders = await Payment.find().sort({ createdAt: -1 }).limit(5);
+    console.log(totalOrders)
+    console.log(totalRevenue)
+    console.log(recentOrders)
+    res.status(200).json({
+      totalOrders,
+      totalRevenue: totalRevenue.length > 0 ? totalRevenue[0].total : 0,
+      recentOrders,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Internal Server Error...!" });
+  }
+};
 // Change to production when going live
 
 const getCourseDetails = async (req, res) => {
@@ -243,16 +265,57 @@ const deleteTransaction = async (req, res) => {
   }
 };
 
-const resendEmailCourse = async (req, res) => {
+const resendAccessCouseLink = async (req, res) => {
   try {
-    
-    
+    const { order_id } = req.body;
+    console.log(req.body)
+    if (!order_id) {
+      return res.status(400).json({ message: "Order ID is required" });
+    }
+
+    // ✅ Fetch payment details
+    const payment = await Payment.findOne({ cashfree_order_id: order_id });
+
+    if (!payment) {
+      return res.status(404).json({ message: "Payment record not found" });
+    }
+
+    // ✅ Fetch user details
+    const user = await User.findOne({ email: payment.email });
+    if (!user) {
+      // ✅ If user does not exist, create a new user (WITHOUT PASSWORD)
+      user = new User({
+        username: payment.username,
+        email: payment.email,
+        phone: payment.phone,
+        orders: [order_id],
+      });
+
+      await user.save();
+    }else {
+      // ✅ If user exists, ensure the order ID is added to their orders
+      if (!user.orders.includes(order_id)) {
+        user.orders.push(order_id);
+        await user.save();
+      }
+    }
+
+    // ✅ Fetch course details
+    const courseDetails = await Course.findById(payment.courseId);
+    if (!courseDetails) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // ✅ Resend the email
+    await sendPaymentSuccessEmail(user, payment.email, courseDetails, order_id);
+
+    return res.json({ message: "Resend email successfully sent", status: "success" });
   } catch (error) {
-    res
-    .status(500)
-    .json({ message : "Internal Server Error...!" })
+    console.error("Error resending payment email:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
-}
+};
+
 
 module.exports = {
   getCourseDetails,
@@ -260,5 +323,6 @@ module.exports = {
   verifyCashfreeOrder,
   getPayments,
   deleteTransaction,
-  resendEmailCourse
+  resendAccessCouseLink,
+  dashboard
 };
