@@ -1,5 +1,7 @@
 const Course = require("../Model/CourseModel");
 const Payment = require("../Model/PurchaseModal");
+const Contact = require("../Model/ContactModel")
+const Lead = require("../Model/LeadModal")
 const User = require("../Model/UserModel");
 const dotenv = require("dotenv");
 const crypto = require("crypto");
@@ -24,27 +26,36 @@ const dashboard = async (req, res) => {
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]);
 
-    // Fetch latest orders
-    const recentOrders = await Payment.find().sort({ createdAt: -1 }).limit(5);
-    console.log(totalOrders)
-    console.log(totalRevenue)
-    console.log(recentOrders)
+    // Fetch leads statistics
+    const totalLeads = await Lead.countDocuments();
+    const leadsGraphData = await Lead.aggregate([
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]).then((data) => data.map((item) => ({ date: item._id, count: item.count })));
+
     res.status(200).json({
       totalOrders,
       totalRevenue: totalRevenue.length > 0 ? totalRevenue[0].total : 0,
-      recentOrders,
+      totalLeads,
+      leadsGraphData,
     });
   } catch (error) {
     res.status(500).json({ message: "Internal Server Error...!" });
   }
 };
+
+
 // Change to production when going live
 
 const getCourseDetails = async (req, res) => {
   try {
     const { courseId } = req.params;
     const course = await Course.findById(courseId);
-
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
@@ -58,11 +69,35 @@ const getCourseDetails = async (req, res) => {
 const createCashfreeOrder = async (req, res) => {
   try {
     const { amount, currency, courseId, customer_details } = req.body;
-    console.log(req.body);
+
     if (!amount || !currency || !courseId || !customer_details) {
       return res.status(400).json({ error: "Invalid request parameters" });
     }
 
+    const { username, email, phone } = customer_details;
+
+    // Check if the lead already exists
+    let lead = await Lead.findOne({ email, courseId });
+
+    if (!lead) {
+      // Create a new lead if not exists
+      lead = await Lead.create({ username, email, phone, courseId });
+    }
+
+    // Check if the contact already exists to avoid duplicate key error
+    let contact = await Contact.findOne({ email });
+
+    if (!contact) {
+      contact = new Contact({
+        username,
+        email,
+        phone,
+        statusTag: "drop-off",
+      });
+      await contact.save();
+    }
+
+    // Generate a unique order ID
     const generatedOrderId = `ORDER_${Date.now()}`;
 
     const response = await axios.post(
@@ -73,10 +108,10 @@ const createCashfreeOrder = async (req, res) => {
         order_id: generatedOrderId,
         courseId,
         customer_details: {
-          customer_id: customer_details._id,
-          customer_name: customer_details.username,
-          customer_email: customer_details.email,
-          customer_phone: customer_details.phone,
+          customer_id: `CF_${Date.now()}`,
+          customer_name: username,
+          customer_email: email,
+          customer_phone: phone,
         },
         order_meta: {
           return_url: `http://localhost:5173/sale/payment-success?order_id=${generatedOrderId}&courseId=${courseId}`,
@@ -92,7 +127,6 @@ const createCashfreeOrder = async (req, res) => {
       }
     );
 
-    console.log("this is server response i need :", response.data.courseId);
     res.json({
       payment_session_id: response.data.payment_session_id,
       cf_order_id: response.data.order_id,
@@ -103,6 +137,7 @@ const createCashfreeOrder = async (req, res) => {
     res.status(500).json({ error: "Payment initiation failed" });
   }
 };
+
 
 const verifyCashfreeOrder = async (req, res) => {
   try {
