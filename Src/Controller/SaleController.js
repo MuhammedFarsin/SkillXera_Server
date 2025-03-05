@@ -13,21 +13,34 @@ dotenv.config();
 
 if (!process.env.CASHFREE_CLIENT_ID || !process.env.CASHFREE_CLIENT_SECRET) {
   console.error("Cashfree API Keys are missing!");
-  process.exit(1); // Stop server if keys are missing
+  process.exit(1); 
 }
 
 const CASHFREE_BASE_URL = "https://sandbox.cashfree.com/pg/orders"; // Sandbox URL
 
 const dashboard = async (req, res) => {
   try {
-    // Fetch order statistics
-    const totalOrders = await Payment.countDocuments();
-    const totalRevenue = await Payment.aggregate([
-      { $group: { _id: null, total: { $sum: "$amount" } } },
+    const totalLeads = await Lead.countDocuments()
+    const totalSales = await Payment.countDocuments()
+    const ordersGraphData = await Payment.aggregate([
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, // Group by date
+          totalOrders: { $sum: 1 },
+          totalRevenue: { $sum: "$amount" },
+        },
+      },
+      { $sort: { "_id": 1 } }, // Sort by date ascending
+      {
+        $project: {
+          _id: 0,
+          date: "$_id", // Rename _id to date
+          totalOrders: 1,
+          totalRevenue: 1,
+        },
+      },
     ]);
 
-    // Fetch leads statistics
-    const totalLeads = await Lead.countDocuments();
     const leadsGraphData = await Lead.aggregate([
       {
         $group: {
@@ -35,22 +48,33 @@ const dashboard = async (req, res) => {
           count: { $sum: 1 },
         },
       },
-      { $sort: { _id: 1 } },
-    ]).then((data) => data.map((item) => ({ date: item._id, count: item.count })));
+      { $sort: { "_id": 1 } },
+      {
+        $project: {
+          _id: 0,
+          date: "$_id",
+          count: 1,
+        },
+      },
+    ]);
+    const recentLeads = await Lead.find()
+      .sort({ createdAt: -1 }) // Sort by latest first
+      .limit(4) // Get only the last 4 leads
+      .select("username email phone createdAt");
 
     res.status(200).json({
-      totalOrders,
-      totalRevenue: totalRevenue.length > 0 ? totalRevenue[0].total : 0,
+      ordersGraphData, // Orders and revenue by date
+      leadsGraphData,  // Leads by date
       totalLeads,
-      leadsGraphData,
+      totalSales,
+      recentLeads
     });
   } catch (error) {
+    console.error("Error fetching dashboard data:", error);
     res.status(500).json({ message: "Internal Server Error...!" });
   }
 };
 
-
-// Change to production when going live
 
 const getCourseDetails = async (req, res) => {
   try {
