@@ -7,7 +7,7 @@ const contactSchema = new mongoose.Schema(
     phone: { type: Number, required: true },
     statusTag: {
       type: String,
-      enum: ["successful", "failed", "drop-off"],
+      enum: ["Success", "failed", "drop-off"],
       default: "drop-off",
     },
     tags: [{ type: mongoose.Schema.Types.ObjectId, ref: "Tag" }],
