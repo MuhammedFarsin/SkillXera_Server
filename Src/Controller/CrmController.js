@@ -1,16 +1,25 @@
 const Contact = require("../Model/ContactModel");
 const Tag = require("../Model/TagModel");
 const mongoose = require("mongoose")
-
 const getContacts = async (req, res) => {
   try {
-    const contacts = await Contact.find().populate("user").populate("tags","name");
-    res.status(200).json(contacts);
+    const contacts = await Contact.find()
+      .populate({
+        path: "user",
+        match: { isAdmin: false }, // Filter only non-admin users
+      })
+      .populate("tags", "name");
+
+    // Remove contacts where `user` is null (i.e., user was admin and got filtered out)
+    const nonAdminContacts = contacts.filter(contact => contact.user !== null);
+
+    res.status(200).json(nonAdminContacts);
   } catch (error) {
     console.error("Error fetching contacts:", error);
     res.status(500).json({ message: "Internal Server Error..." });
   }
 };
+
 
 const addContact = async (req, res) => {
   try {

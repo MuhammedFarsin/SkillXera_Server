@@ -1,6 +1,6 @@
 const nodemailer = require("nodemailer");
 const dotenv = require("dotenv");
-const crypto = require("crypto"); // ✅ Import crypto module
+const { generateResetToken } = require("../Config/ResetToken");
 
 dotenv.config();
 
@@ -43,16 +43,7 @@ const sendPaymentSuccessEmail = async (user, toEmail, courseDetails, paymentId) 
 
     if (!user.password) {
       // Generate reset token
-      const resetToken = crypto.randomBytes(32).toString("hex");
-      const resetTokenExpires = Date.now() + 15 * 60 * 1000; // 15 minutes expiry
-      console.log(resetToken)
-      console.log(resetTokenExpires)
-      // Save token in database
-      user.passwordResetToken = resetToken;
-      user.passwordResetExpires = resetTokenExpires;
-      await user.save();
-
-      // Set-password link
+      const resetToken = await generateResetToken(user);
       const resetLink = `${process.env.FRONTEND_URL}/set-password?token=${resetToken}&email=${toEmail}`;
 
       additionalContent = `

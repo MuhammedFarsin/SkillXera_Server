@@ -1,31 +1,31 @@
 const Course = require("../Model/CourseModel");
 const Payment = require("../Model/PurchaseModal");
-const Contact = require("../Model/ContactModel")
-const Lead = require("../Model/LeadModal")
+const Contact = require("../Model/ContactModel");
+const Lead = require("../Model/LeadModal");
 const User = require("../Model/UserModel");
 const dotenv = require("dotenv");
 const crypto = require("crypto");
 const axios = require("axios");
 const { Cashfree } = require("cashfree-pg");
 const { sendPaymentSuccessEmail } = require("../Utils/sendMail");
-
+const { generateResetToken } = require("../Config/ResetToken");
 
 dotenv.config();
 
 if (!process.env.CASHFREE_CLIENT_ID || !process.env.CASHFREE_CLIENT_SECRET) {
   console.error("Cashfree API Keys are missing!");
-  process.exit(1); 
+  process.exit(1);
 }
 
 const CASHFREE_BASE_URL = "https://sandbox.cashfree.com/pg/orders"; // Sandbox URL
 
 const dashboard = async (req, res) => {
   try {
-    const totalLeads = await Lead.countDocuments()
-    const totalSales = await Payment.countDocuments()
+    const totalLeads = await Lead.countDocuments();
+    const totalSales = await Payment.countDocuments();
     const ordersGraphData = await Payment.aggregate([
       {
-        $match : { status : "Success" }
+        $match: { status: "Success" },
       },
       {
         $group: {
@@ -34,7 +34,7 @@ const dashboard = async (req, res) => {
           totalRevenue: { $sum: "$amount" },
         },
       },
-      { $sort: { "_id": 1 } }, // Sort by date ascending
+      { $sort: { _id: 1 } }, // Sort by date ascending
       {
         $project: {
           _id: 0,
@@ -52,7 +52,7 @@ const dashboard = async (req, res) => {
           count: { $sum: 1 },
         },
       },
-      { $sort: { "_id": 1 } },
+      { $sort: { _id: 1 } },
       {
         $project: {
           _id: 0,
@@ -66,35 +66,35 @@ const dashboard = async (req, res) => {
       .limit(4) // Get only the last 4 leads
       .select("username email phone createdAt");
 
-      const totalRevenueData = await Payment.aggregate([
-        {
-          $match : { status : "Success" }
+    const totalRevenueData = await Payment.aggregate([
+      {
+        $match: { status: "Success" },
+      },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$amount" }, // Ensure "amount" is used
         },
-        {
-          $group: {
-            _id: null,
-            totalRevenue: { $sum: "$amount" }, // Ensure "amount" is used
-          },
-        },
-      ]);
-  
-      // Extract totalRevenue value safely
-      const totalRevenue = totalRevenueData.length > 0 ? totalRevenueData[0].totalRevenue : 0;
+      },
+    ]);
+
+    // Extract totalRevenue value safely
+    const totalRevenue =
+      totalRevenueData.length > 0 ? totalRevenueData[0].totalRevenue : 0;
 
     res.status(200).json({
       ordersGraphData, // Orders and revenue by date
-      leadsGraphData,  // Leads by date
+      leadsGraphData, // Leads by date
       totalLeads,
       totalSales,
       recentLeads,
-      totalRevenue
+      totalRevenue,
     });
   } catch (error) {
     console.error("Error fetching dashboard data:", error);
     res.status(500).json({ message: "Internal Server Error...!" });
   }
 };
-
 
 const getCourseDetails = async (req, res) => {
   try {
@@ -158,7 +158,7 @@ const createCashfreeOrder = async (req, res) => {
           customer_phone: phone,
         },
         order_meta: {
-          return_url: `http://localhost:5173/sale/payment-success?order_id=${generatedOrderId}&courseId=${courseId}`,
+          return_url: `http://localhost:5173/sale/payment-success?order_id=${generatedOrderId}&courseId=${courseId}&email=${email}`,
         },
       },
       {
@@ -182,15 +182,27 @@ const createCashfreeOrder = async (req, res) => {
   }
 };
 
-
-
 const verifyCashfreeOrder = async (req, res) => {
   try {
-
-    const { order_id, courseId } = req.body;
-
+    const { order_id, courseId, email } = req.body;
+    console.log(req.body);
     if (!order_id) {
       return res.status(400).json({ message: "Order ID is required" });
+    }
+
+    // ✅ Check if the user already made a successful payment for the course
+    const existingPayment = await Payment.findOne({
+      email,
+      courseId,
+      status: "Success",
+    });
+
+    if (existingPayment) {
+      return res.status(201).json({
+        status: "already_paid",
+        message: "You have already purchased this course.",
+        payment: existingPayment,
+      });
     }
 
     // ✅ Fetch order details from Cashfree
@@ -207,7 +219,7 @@ const verifyCashfreeOrder = async (req, res) => {
     );
 
     const orderData = response.data;
-    const paymentStatus = orderData?.order_status; // "PAID" or "FAILED"
+    const paymentStatus = orderData?.order_status;
     const isPaymentSuccess = paymentStatus === "PAID";
     const { order_amount, customer_details, created_at } = orderData;
     const { customer_name, customer_email, customer_phone } = customer_details;
@@ -220,7 +232,6 @@ const verifyCashfreeOrder = async (req, res) => {
       if (existingPayment) {
         finalCourseId = existingPayment.courseId;
       }
-
       if (!finalCourseId) {
         const matchedCourse = await Course.findOne({ price: order_amount });
         if (matchedCourse) {
@@ -239,21 +250,24 @@ const verifyCashfreeOrder = async (req, res) => {
     // ✅ Fetch course details
     const courseDetails = await Course.findById(finalCourseId);
     if (!courseDetails) {
-      return res.status(404).json({ message: "Course not found", status: "failed" });
+      return res
+        .status(404)
+        .json({ message: "Course not found", status: "failed" });
     }
 
     // ✅ Check if user exists in the database
     let user = await User.findOne({ email: customer_email });
 
+    let resetLink = null;
     if (!user) {
       user = new User({
         username: customer_name,
         email: customer_email,
         phone: customer_phone,
-        orders: isPaymentSuccess ? [order_id] : [], // ✅ Only add order if successful
+        orders: isPaymentSuccess ? [order_id] : [],
       });
 
-      await user.save();
+      await user.save(); 
     } else {
       if (isPaymentSuccess && !user.orders.includes(order_id)) {
         user.orders.push(order_id);
@@ -261,7 +275,16 @@ const verifyCashfreeOrder = async (req, res) => {
       }
     }
 
-    // ✅ Save payment details (even if failed)
+    if (!user.password) {
+      const resetToken = await generateResetToken(user);
+      if (resetToken) {
+        resetLink = `${process.env.FRONTEND_URL}/set-password?token=${resetToken}&email=${customer_email}`;
+        await user.save();
+      }
+    }
+    
+
+    // ✅ Save payment details
     const paymentData = {
       username: customer_name,
       email: customer_email,
@@ -276,7 +299,7 @@ const verifyCashfreeOrder = async (req, res) => {
     const payment = new Payment(paymentData);
     await payment.save();
 
-    // ✅ Update Contact status based on payment result
+    // ✅ Update Contact status
     const contact = await Contact.findOne({ email: customer_email });
     if (contact) {
       contact.statusTag = isPaymentSuccess ? "Success" : "failed";
@@ -285,7 +308,12 @@ const verifyCashfreeOrder = async (req, res) => {
 
     // ✅ Send success email only for successful payments
     if (isPaymentSuccess) {
-      await sendPaymentSuccessEmail(user, customer_email, courseDetails, order_id);
+      await sendPaymentSuccessEmail(
+        user,
+        customer_email,
+        courseDetails,
+        order_id
+      );
 
       // ✅ Send Facebook Pixel Purchase Event
       const fbPixelData = {
@@ -321,6 +349,8 @@ const verifyCashfreeOrder = async (req, res) => {
         : "Payment verification failed",
       status: isPaymentSuccess ? "success" : "failed",
       payment,
+      user,
+      resetLink,
     });
   } catch (error) {
     console.error(
@@ -331,14 +361,11 @@ const verifyCashfreeOrder = async (req, res) => {
   }
 };
 
-
 // ✅ Hash function for user data encryption
 
 const hash = (data) => {
   return crypto.createHash("sha256").update(data).digest("hex");
 };
-
-
 
 const getPayments = async (req, res) => {
   try {
@@ -375,7 +402,7 @@ const deleteTransaction = async (req, res) => {
 const resendAccessCouseLink = async (req, res) => {
   try {
     const { order_id } = req.body;
-    console.log(req.body)
+    console.log(req.body);
     if (!order_id) {
       return res.status(400).json({ message: "Order ID is required" });
     }
@@ -399,7 +426,7 @@ const resendAccessCouseLink = async (req, res) => {
       });
 
       await user.save();
-    }else {
+    } else {
       // ✅ If user exists, ensure the order ID is added to their orders
       if (!user.orders.includes(order_id)) {
         user.orders.push(order_id);
@@ -416,13 +443,15 @@ const resendAccessCouseLink = async (req, res) => {
     // ✅ Resend the email
     await sendPaymentSuccessEmail(user, payment.email, courseDetails, order_id);
 
-    return res.json({ message: "Resend email successfully sent", status: "success" });
+    return res.json({
+      message: "Resend email successfully sent",
+      status: "success",
+    });
   } catch (error) {
     console.error("Error resending payment email:", error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 
 module.exports = {
   getCourseDetails,
@@ -431,5 +460,5 @@ module.exports = {
   getPayments,
   deleteTransaction,
   resendAccessCouseLink,
-  dashboard
+  dashboard,
 };

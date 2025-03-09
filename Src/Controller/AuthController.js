@@ -5,8 +5,9 @@ const {
   generateAccessToken,
   generateRefreshToken,
 } = require("../Config/jwtConfig");
-const sendOtpMail = require("../Utils/sendMail");
+const {sendOtpEmail} = require("../Utils/sendMail");
 const dotenv = require("dotenv");
+const crypto = require("crypto")
 const Contact = require("../Model/ContactModel");
 
 const tempUsers = {};
@@ -74,7 +75,7 @@ const signup = async (req, res) => {
       phone,
       otp: generatedOtp,
     };
-    await sendOtpMail(email, generatedOtp);
+    await sendOtpEmail(email, generatedOtp);
     console.log(`OTP for ${email}:`, generatedOtp);
     return res
       .status(200)
@@ -92,8 +93,7 @@ const verifyOtp = async (req, res) => {
       return res
         .status(400)
         .json({ message: "OTP expired! Please request a new one." });
-    }
-
+    } 
     const { otp: storedOtp, otpExpiresAt } = tempUsers[email];
 
     if (new Date() > otpExpiresAt) {
@@ -286,45 +286,72 @@ const logout =  async (req, res) => {
     res.status(500).json({ message: 'Internal Server Error' });
   }
 }
-const setPassword = async ( req, res ) => {
+
+const setPassword = async (req, res) => {
   try {
     const { email, token, newPassword } = req.body;
-    console.log(req.body)
-    // Validate input
+
     if (!email || !token || !newPassword) {
       return res.status(400).json({ message: "Missing required fields" });
     }
-    
-    // Find user with the token and check if it's expired
-    const user = await User.findOne({
-      email,
-      passwordResetToken: token,
-      passwordResetExpires: { $gt: Date.now() }, // Ensure token is not expired
-    });
-    
+
+    const user = await User.findOne({ email }).select("+passwordResetToken +passwordResetExpires");
 
     if (!user) {
-      return res.status(400).json({ message: "Invalid or expired token" });
+      return res.status(400).json({ message: "User not found" });
     }
 
-    // Hash the new password
+    if (!user.passwordResetToken || !user.passwordResetExpires) {
+      return res.status(400).json({ message: "Token missing or invalid" });
+    }
+
+    if (user.passwordResetExpires < Date.now()) {
+      return res.status(400).json({ message: "Token expired" });
+    }
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    if (hashedToken !== user.passwordResetToken) {
+      return res.status(400).json({ message: "Invalid token" });
+    }
+
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
 
-    // Clear reset token fields
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
 
-    // Save the updated user
     await user.save();
 
-    res.status(200).json({ message: "Password reset successfully. You can now log in." });
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+
+    user.refreshToken = refreshToken;
+    await user.save();
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'Strict',
+    });
+
+    return res.status(200).json({
+      message: "Password set successfully.",
+      accessToken,
+      user: {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        isAdmin: user.isAdmin,
+      },
+    });
   } catch (error) {
-    res
-    .status(500)
-    .json({ message : "Internal Server Error..." })
+    console.error("Error in setPassword:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
-}
+};
+
+
 module.exports = {
   signin,
   signup,
