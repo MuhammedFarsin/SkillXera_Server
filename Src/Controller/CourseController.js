@@ -16,22 +16,14 @@ const getCourse = async (req, res) => {
 };
 const createCourse = async (req, res) => {
   try {
-    const { title, description, route, buyCourse, price } = req.body;
+    const { title, description, route, buyCourse, regularPrice, salesPrice } = req.body;
     
-    console.log("Uploaded Files:", req.files);
-
-    if (!title || !description || !route || !buyCourse || !price || !req.files || !req.files.images || !req.files.video) {
+    if (!title || !description || !route || !buyCourse || !regularPrice || !salesPrice || !req.files || !req.files.images) {
       return res.status(400).json({ message: "All fields, at least 3 images, and a video are required" });
     }
 
-    // Store image and video paths
     const imagePaths = req.files.images.map((file) => `/uploads/${file.filename}`);
-    const videoPath = `/videos/${req.files.video[0].filename}`; // Get first video file
 
-    console.log("Image Paths:", imagePaths);
-    console.log("Video Path:", videoPath);
-
-    // Check if the course already exists
     const existingCourse = await Course.findOne({ title });
     if (existingCourse) {
       return res.status(400).json({ message: "Course already exists" });
@@ -43,9 +35,9 @@ const createCourse = async (req, res) => {
       description,
       route,
       buyCourse,
-      price,
+      regularPrice,
+      salesPrice,
       images: imagePaths,
-      video: videoPath,
     });
 
     const course = await newCourse.save();
