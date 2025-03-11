@@ -61,7 +61,8 @@ const deleteCourse = async (req, res) => {
 };
 const getEditCourse = async (req, res) => {
   try {
-    const courseId = req.params.id;
+    const courseId = req.params.courseId;
+    console.log(courseId)
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
     res.json(course);
@@ -71,28 +72,25 @@ const getEditCourse = async (req, res) => {
 };
 
 const updateCourse = async (req, res) => {
-  console.log('this is calling');
 
   try {
-    const { course } = req.params;
-    const { title, route, buyCourse, price, description, existingImages, existingVideos } = req.body;
+    const courseId  = req.params.courseId;
+    const { title, route, buyCourse, regularPrice, salesPrice, description, existingImages } = req.body;
 
     // Ensure files exist before accessing them
     const imageFiles = req.files?.images || []; 
-    const videoFiles = req.files?.video || []; 
 
-    if (!title || !route || !buyCourse || !price || !description) {
+    if (!title || !route || !buyCourse || !regularPrice || !salesPrice || !description) {
       return res.status(400).json({ message: "All fields are required!" });
     }
 
-    const existingCourse = await Course.findById(course);
+    const existingCourse = await Course.findById(courseId);
     if (!existingCourse) {
       return res.status(404).json({ message: "Course not found!" });
     }
 
     // Parse existing images and videos from request (if sent as JSON string)
     let parsedExistingImages = existingImages ? JSON.parse(existingImages) : existingCourse.images || [];
-    let parsedExistingVideos = existingVideos ? JSON.parse(existingVideos) : existingCourse.video || "";
 
     // Fix: Append new images instead of replacing
     const newImagePaths = [
@@ -100,15 +98,10 @@ const updateCourse = async (req, res) => {
       ...imageFiles.map((file) => `/uploads/${file.filename}`)
     ];
 
-    let newVideoPath = parsedExistingVideos;
-    if (videoFiles.length > 0) {
-      newVideoPath = `/videos/${videoFiles[0].filename}`;
-    }
-
     // Update the course
     const updatedCourse = await Course.findByIdAndUpdate(
-      course,
-      { title, route, buyCourse, price, description, images: newImagePaths, video: newVideoPath },
+      courseId,
+      { title, route, buyCourse, regularPrice, salesPrice, description, images: newImagePaths },
       { new: true }
     );
 
@@ -290,16 +283,15 @@ const addLecture = async (req, res) => {
       return res.status(400).json({ message: "Video file is required" });
     }
 
-    const videoPath = `/videos/${req.files.video[0].filename}`;; // Relative path for frontend usage
+    const videoPath = `/videos/${req.files.video[0].filename}`;
 
-    // Find the course and module
+
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
 
     const module = course.modules.id(moduleId);
     if (!module) return res.status(404).json({ message: "Module not found" });
 
-    // Create new lecture entry
     const newLecture = {
       _id: new mongoose.Types.ObjectId(),
       title,
@@ -376,7 +368,7 @@ const deleteLecture = async (req, res) => {
 const getEditLecture = async (req, res) => {
   try {
     const { courseId, moduleId, lectureId } = req.params;
-    
+     
     // Find the course
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
@@ -389,7 +381,6 @@ const getEditLecture = async (req, res) => {
     const lecture = module.lectures.id(lectureId);
     if (!lecture) return res.status(404).json({ message: "Lecture not found" });
 
-    // Return the lecture data
     res.status(200).json(lecture);
   } catch (error) {
     res.status(500).json({ message: "Internal Server Error", error: error.message });
@@ -401,32 +392,31 @@ const EditLecture = async (req, res) => {
     const { courseId, moduleId, lectureId } = req.params;
     const { title, description, duration } = req.body;
 
-    // Find the course
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
 
-    // Find the module inside the course
     const module = course.modules.id(moduleId);
     if (!module) return res.status(404).json({ message: "Module not found" });
 
-    // Find the lecture inside the module
     const lecture = module.lectures.id(lectureId);
     if (!lecture) return res.status(404).json({ message: "Lecture not found" });
 
-    // Update lecture fields
+
     if (title) lecture.title = title;
     if (description) lecture.description = description;
-    if (duration) lecture.duration = Number(duration); // Ensure it's a number
+    if (duration) lecture.duration = Number(duration); 
 
-    // If a new video is uploaded, delete the old one and update the path
-    if (req.files.video) {
+    if (req.files && req.files.video) { 
+
       if (lecture.videoUrl) {
-        const oldVideoPath = path.join(__dirname, "..", "public", "videos", lecture.videoUrl);
+        const oldVideoPath = path.join(__dirname, "..", "public", "video", lecture.videoUrl);
+        console.log(oldVideoPath)
         if (fs.existsSync(oldVideoPath)) {
-          fs.unlinkSync(oldVideoPath); // Delete old video
+          fs.unlinkSync(oldVideoPath); 
         }
       }
-      lecture.videoUrl = `/videos/${req.files.video[0].filename}`; // Store relative path for frontend usage
+      lecture.videoUrl = `/videos/${req.files.video[0].filename}`;
+
     }
 
     await course.save(); // Save the updated course document
@@ -441,8 +431,6 @@ const EditLecture = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
-module.exports = EditLecture;
 
 const getModuleLecture = async (req, res) => {
   try {

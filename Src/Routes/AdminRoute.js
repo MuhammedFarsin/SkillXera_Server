@@ -46,9 +46,9 @@ adminRoute.get("/sales-data", dashboard)
 adminRoute.get("/assets/get-courses", authenticateAccessToken,isAdmin, getCourse);
 adminRoute.post("/assets/add-course", authenticateAccessToken,isAdmin,uploadMiddleware, createCourse);
 adminRoute.delete("/assets/delete-course/:Id",authenticateAccessToken,isAdmin, deleteCourse);
-adminRoute.get("/assets/edit-course/:id",authenticateAccessToken,isAdmin, getEditCourse);
+adminRoute.get("/assets/edit-course/:courseId",authenticateAccessToken,isAdmin, getEditCourse);
 adminRoute.put(
-  "/assets/update-course/:course",
+  "/assets/update-course/:courseId",
   authenticateAccessToken,isAdmin,
   uploadMiddleware,
   updateCourse

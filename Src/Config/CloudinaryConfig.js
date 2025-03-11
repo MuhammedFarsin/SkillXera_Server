@@ -4,9 +4,11 @@ const fs = require("fs");
 
 // Define upload directories
 const imageUploadDir = path.join(__dirname, "../../public/uploads");
+const videoUploadDir = path.join(__dirname, "../../public/videos");
 
 // Ensure upload directories exist
 if (!fs.existsSync(imageUploadDir)) fs.mkdirSync(imageUploadDir, { recursive: true });
+if (!fs.existsSync(videoUploadDir)) fs.mkdirSync(videoUploadDir, { recursive: true });
 
 // Helper function to sanitize file names
 const sanitizeFileName = (fileName) => {
@@ -18,6 +20,8 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     if (file.mimetype.startsWith("image/")) {
       cb(null, imageUploadDir);
+    } else if (file.mimetype.startsWith("video/")) {
+      cb(null, videoUploadDir);
     } else {
       cb(new Error("Invalid file type!"), false);
     }
@@ -30,13 +34,15 @@ const storage = multer.diskStorage({
   },
 });
 
+// Allowed file types
+const allowedImages = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const allowedVideos = ["video/mp4", "video/mpeg", "video/quicktime", "video/x-msvideo", "video/x-matroska"];
+
 // Multer middleware for handling both images and videos
 const upload = multer({
   storage,
-  limits: { fileSize: 5000 * 1024 * 1024 }, // 5GB max for videos
+  limits: { fileSize: 5000 * 1024 * 1024 }, // 5GB max
   fileFilter: (req, file, cb) => {
-    const allowedImages = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-
     if (allowedImages.includes(file.mimetype) || allowedVideos.includes(file.mimetype)) {
       cb(null, true);
     } else {
@@ -48,6 +54,7 @@ const upload = multer({
 // Handle multiple files (both images and videos)
 const uploadMiddleware = upload.fields([
   { name: "images", maxCount: 5 },
+  { name: "video", maxCount: 1 }, // Adjust max count as needed
 ]);
 
 module.exports = uploadMiddleware;
