@@ -542,6 +542,26 @@ const showCourses = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
+const getBuyCourseDetails = async (req, res) => {
+  try {
+    const { courseId } = req.params
+
+    if(!courseId){
+      res.status(400).json({ message : "CourseId not Found...!" })
+    }
+
+    const course = await Course.findById(courseId)
+
+    if(!course){
+      res.status(401).json({ message : "Course did not found...!"})
+    }
+
+    res.status(200).json({ course })
+
+  } catch (error) {
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+}
 
 
 
@@ -567,5 +587,6 @@ module.exports = {
   getModuleLecture,
   getUserCourses,
   userCourse,
-  showCourses
+  showCourses,
+  getBuyCourseDetails
 };
