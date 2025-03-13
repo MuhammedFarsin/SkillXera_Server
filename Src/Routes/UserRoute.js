@@ -13,6 +13,7 @@ const {
 } = require("../Controller/AuthController");
 const { authenticateAccessToken, authenticateRefreshToken } = require("../Middleware/jwtAuth");
 const { getUserCourses, userCourse, showCourses, getBuyCourseDetails } = require("../Controller/CourseController")
+const { getCourseDetails, createCashfreeOrderCheckout, verifyCashfreeOrder } = require("../Controller/SaleController")
 const userRoute = express.Router();
 
 userRoute.post("/signin", signin);
@@ -30,6 +31,9 @@ userRoute.get("/user-orders/:userId",authenticateAccessToken, getUserCourses)
 userRoute.get("/learn/:courseId",authenticateAccessToken, userCourse)
 userRoute.get("/explore/:userId", authenticateAccessToken, showCourses)
 userRoute.get("/get-course-buy-details/:courseId", authenticateAccessToken, getBuyCourseDetails)
+userRoute.get("/buy-course/course/:courseId", authenticateAccessToken, getCourseDetails);
+userRoute.post("/create-cashfree-order",authenticateAccessToken, createCashfreeOrderCheckout);
+userRoute.post("/verify-cashfree-payment",authenticateAccessToken, verifyCashfreeOrder);
 
 
 userRoute.post("/logout", logout);

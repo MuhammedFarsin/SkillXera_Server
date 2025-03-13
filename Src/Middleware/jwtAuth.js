@@ -9,17 +9,23 @@ const authenticateAccessToken = (req, res, next) => {
 
   try {
     const decoded = verifyAccessToken(token);
-    req.user = decoded; // Attach user data to request
+    req.user = decoded; 
     next();
   } catch (err) {
     console.error("Access token error:", err);
-    return res.status(401).json({ message: "Invalid or expired access token" });
+
+    // Check if token is expired
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Access token expired. Please refresh your token." });
+    }
+
+    return res.status(401).json({ message: "Invalid access token" });
   }
 };
 
 // Middleware to authenticate refresh token
 const authenticateRefreshToken = (req, res, next) => {
-  const refreshToken = req.cookies.refreshToken; // Assuming the refresh token is stored in cookies
+  const refreshToken = req.cookies.refreshToken;
   if (!refreshToken) {
     return res.status(401).json({ message: "Refresh token is required" });
   }

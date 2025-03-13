@@ -99,6 +99,7 @@ const dashboard = async (req, res) => {
 const getCourseDetails = async (req, res) => {
   try {
     const { courseId } = req.params;
+
     const course = await Course.findById(courseId);
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
@@ -182,15 +183,84 @@ const createCashfreeOrder = async (req, res) => {
   }
 };
 
+const createCashfreeOrderCheckout = async (req, res) => {
+  try {
+    const { amount, currency, courseId, customer_details } = req.body;
+
+    if (!amount || !currency || !courseId || !customer_details) {
+      return res.status(400).json({ error: "Invalid request parameters" });
+    }
+
+    const { username, email, phone } = customer_details;
+
+    // Check if the lead already exists
+    let lead = await Lead.findOne({ email, courseId });
+
+    if (!lead) {
+      lead = await Lead.create({ username, email, phone, courseId });
+    }
+
+    let contact = await Contact.findOne({ email });
+
+    if (!contact) {
+      contact = new Contact({
+        username,
+        email,
+        phone,
+        statusTag: "drop-off",
+      });
+      await contact.save();
+    }
+
+    // Generate a unique order ID
+    const generatedOrderId = `ORDER_${Date.now()}`;
+
+    const response = await axios.post(
+      `${CASHFREE_BASE_URL}`,
+      {
+        order_amount: amount,
+        order_currency: currency,
+        order_id: generatedOrderId,
+        courseId,
+        customer_details: {
+          customer_id: `CF_${Date.now()}`,
+          customer_name: username,
+          customer_email: email,
+          customer_phone: phone,
+        },
+        order_meta: {
+          return_url: `http://localhost:5173/payment-success?order_id=${generatedOrderId}&courseId=${courseId}&email=${email}`,
+        },
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "X-Client-Id": process.env.CASHFREE_CLIENT_ID,
+          "X-Client-Secret": process.env.CASHFREE_CLIENT_SECRET,
+          "x-api-version": "2022-09-01",
+        },
+      }
+    );
+
+    res.json({
+      payment_session_id: response.data.payment_session_id,
+      cf_order_id: response.data.order_id,
+      courseId: courseId,
+    });
+  } catch (error) {
+    console.error("Cashfree API Error:", error.response?.data || error);
+    res.status(500).json({ error: "Payment initiation failed" });
+  }
+};
+
+
 const verifyCashfreeOrder = async (req, res) => {
   try {
     const { order_id, courseId, email } = req.body;
-    console.log(req.body);
     if (!order_id) {
       return res.status(400).json({ message: "Order ID is required" });
     }
 
-    // ✅ Check if the user already made a successful payment for the course
     const existingPayment = await Payment.findOne({
       email,
       courseId,
@@ -205,7 +275,6 @@ const verifyCashfreeOrder = async (req, res) => {
       });
     }
 
-    // ✅ Fetch order details from Cashfree
     const response = await axios.get(
       `https://sandbox.cashfree.com/pg/orders/${order_id}`,
       {
@@ -226,7 +295,6 @@ const verifyCashfreeOrder = async (req, res) => {
 
     let finalCourseId = courseId;
 
-    // ✅ Determine courseId if missing
     if (!finalCourseId) {
       const existingPayment = await Payment.findOne({ email: customer_email });
       if (existingPayment) {
@@ -417,7 +485,6 @@ const resendAccessCouseLink = async (req, res) => {
     // ✅ Fetch user details
     const user = await User.findOne({ email: payment.email });
     if (!user) {
-      // ✅ If user does not exist, create a new user (WITHOUT PASSWORD)
       user = new User({
         username: payment.username,
         email: payment.email,
@@ -461,4 +528,5 @@ module.exports = {
   deleteTransaction,
   resendAccessCouseLink,
   dashboard,
+  createCashfreeOrderCheckout
 };

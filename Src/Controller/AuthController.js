@@ -265,7 +265,7 @@ const refreshToken = async (req, res) => {
     }
 
     const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-    console.log('this is decoded :',decoded)
+    // console.log('this is decoded :',decoded)
     const user = await User.findOne({ email: decoded.email });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
