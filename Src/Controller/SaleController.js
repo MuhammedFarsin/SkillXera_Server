@@ -7,10 +7,21 @@ const dotenv = require("dotenv");
 const crypto = require("crypto");
 const axios = require("axios");
 const { Cashfree } = require("cashfree-pg");
+const Razorpay = require("razorpay")
 const { sendPaymentSuccessEmail } = require("../Utils/sendMail");
 const { generateResetToken } = require("../Config/ResetToken");
 
 dotenv.config();
+
+const razorpay = new Razorpay({
+  key_id : process.env.RAZORPAY_KEY_ID, 
+  key_secret : process.env.RAZORPAY_SECRET_ID
+});
+
+if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_SECRET_ID) {
+  console.error("❌ Razorpay keys are missing. Check your environment variables.");
+}
+
 
 if (!process.env.CASHFREE_CLIENT_ID || !process.env.CASHFREE_CLIENT_SECRET) {
   console.error("Cashfree API Keys are missing!");
@@ -359,7 +370,7 @@ const verifyCashfreeOrder = async (req, res) => {
       phone: customer_phone,
       courseId: finalCourseId,
       amount: order_amount,
-      cashfree_order_id: order_id,
+      orderId: order_id,
       status: isPaymentSuccess ? "Success" : "Failed",
       createdAt: created_at,
     };
@@ -467,6 +478,196 @@ const deleteTransaction = async (req, res) => {
   }
 };
 
+
+const createRazorpayOrder = async (req, res) => {
+  try {
+    const { amount, currency, courseId, customer_details } = req.body;
+
+    // 🛑 Improved Validation
+    if (typeof amount !== "number" || !currency || !courseId || !customer_details) {
+      return res.status(400).json({ error: "Invalid request parameters" });
+    }
+
+    const { username, email, phone } = customer_details;
+    console.log(customer_details)
+
+    // 🔍 Check for existing Lead
+    let lead = await Lead.findOne({ email, courseId });
+    if (!lead) {
+      lead = await Lead.create({ username, email, phone, courseId });
+    }
+
+    // 🔍 Check for existing Contact
+    let contact = await Contact.findOne({ email });
+    if (!contact) {
+      contact = await Contact.create({ username, email, phone, statusTag: "drop-off" });
+    }
+
+    // 💰 Convert amount to paise
+    const amountInPaise = Math.round(amount * 100);
+
+    // 🛒 Create Razorpay Order
+    const options = {
+      amount: amountInPaise,
+      currency: "INR",
+      receipt: `receipt_${Date.now()}`,
+      notes: {
+        username,
+        email,
+        phone,
+        courseId
+      }
+    };
+    
+
+    const order = await razorpay.orders.create(options);
+    console.log("✅ Order:", order);
+
+    res.status(200).json({ data: order });
+
+  } catch (error) {
+    console.error("❌ Razorpay Error Details:", error.error || error);
+    res.status(500).json({ 
+      error: error.error?.description || "Payment gateway error" 
+    });
+  }
+};
+
+const verifyRazorpayPayment = async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, courseId } = req.body;
+    console.log(req.body)
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ success: false, message: "Invalid Payment Details" });
+    }
+    const razorpayOrder = await razorpay.orders.fetch(razorpay_order_id);
+    console.log("✅ Razorpay Order Details:", razorpayOrder);
+
+    const { username, email, phone } = razorpayOrder.notes;
+
+    const generated_signature = crypto
+    .createHmac("sha256", process.env.RAZORPAY_SECRET_ID)
+    .update(razorpay_order_id + "|" + razorpay_payment_id) 
+    .digest("hex");
+  
+    const isPaymentSuccess = generated_signature === razorpay_signature;
+    
+    if (!isPaymentSuccess) {
+      return res.status(400).json({ success: false, message: "Payment Verification Failed" });
+    }
+
+    // ✅ Check if the user already paid for the course
+    const existingPayment = await Payment.findOne({ email, courseId, status: "Success" });
+
+    if (existingPayment) {
+      return res.status(201).json({
+        status: "already_paid",
+        message: "You have already purchased this course.",
+        payment: existingPayment,
+      });
+    }
+
+    // ✅ Fetch course details
+    const courseDetails = await Course.findById(courseId);
+    if (!courseDetails) {
+      return res.status(404).json({ message: "Course not found", status: "failed" });
+    }
+
+    // ✅ Check if user exists
+    let user = await User.findOne({ email });
+
+    let resetLink = null;
+    if (!user) {
+      user = new User({
+        username,
+        email,
+        phone,
+        orders: [razorpay_order_id],
+      });
+
+      await user.save();
+    } else {
+      if (!user.orders.includes(razorpay_order_id)) {
+        user.orders.push(razorpay_order_id);
+        await user.save();
+      }
+    }
+
+    if (!user.password) {
+      const resetToken = await generateResetToken(user);
+      if (resetToken) {
+        resetLink = `${process.env.FRONTEND_URL}/set-password?token=${resetToken}&email=${email}`;
+        await user.save();
+      }
+    }
+
+    // ✅ Save payment details
+    const paymentData = {
+      username,
+      email,
+      phone,
+      courseId,
+      amount: courseDetails.regularPrice,
+      orderId: razorpay_order_id,
+      status: "Success",
+      createdAt: new Date(),
+      paymentMethod: "Razorpay",
+    };
+
+    const payment = new Payment(paymentData);
+    await payment.save();
+
+    // ✅ Update Contact status
+    const contact = await Contact.findOne({ email });
+    if (contact) {
+      contact.statusTag = "Success";
+      await contact.save();
+    }
+
+    // ✅ Send success email
+    await sendPaymentSuccessEmail(user, email, courseDetails, razorpay_order_id);
+
+    // ✅ Track with Facebook Pixel
+    const fbPixelData = {
+      event_name: "Purchase",
+      event_time: Math.floor(Date.now() / 1000),
+      event_source_url: `${process.env.FRONTEND_URL}/payment-success`,
+      user_data: {
+        em: [hash(email)],
+        ph: user.phone ? [hash(user.phone)] : [],
+      },
+      custom_data: {
+        value: courseDetails.price,
+        currency: "INR",
+        order_id: razorpay_order_id,
+        content_name: courseDetails.title,
+        content_ids: [courseId],
+        content_type: "product",
+      },
+      action_source: "website",
+    };
+
+    const fbResponse = await axios.post(
+      `https://graph.facebook.com/v18.0/${process.env.FB_PIXEL_ID}/events?access_token=${process.env.FB_ACCESS_TOKEN}`,
+      { data: [fbPixelData] }
+    );
+
+    console.log("Facebook Pixel Response:", fbResponse.data);
+
+    return res.json({
+      message: "Payment verified, course details sent, and event tracked",
+      status: "success",
+      payment,
+      user,
+      resetLink,
+    });
+  } catch (error) {
+    console.error("Razorpay Payment Verification Error:", error.message || error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
 const resendAccessCouseLink = async (req, res) => {
   try {
     const { order_id } = req.body;
@@ -476,7 +677,7 @@ const resendAccessCouseLink = async (req, res) => {
     }
 
     // ✅ Fetch payment details
-    const payment = await Payment.findOne({ cashfree_order_id: order_id });
+    const payment = await Payment.findOne({ orderId: order_id });
 
     if (!payment) {
       return res.status(404).json({ message: "Payment record not found" });
@@ -528,5 +729,7 @@ module.exports = {
   deleteTransaction,
   resendAccessCouseLink,
   dashboard,
-  createCashfreeOrderCheckout
+  createCashfreeOrderCheckout,
+  createRazorpayOrder,
+  verifyRazorpayPayment
 };

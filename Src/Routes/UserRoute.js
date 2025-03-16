@@ -13,7 +13,7 @@ const {
 } = require("../Controller/AuthController");
 const { authenticateAccessToken, authenticateRefreshToken } = require("../Middleware/jwtAuth");
 const { getUserCourses, userCourse, showCourses, getBuyCourseDetails } = require("../Controller/CourseController")
-const { getCourseDetails, createCashfreeOrderCheckout, verifyCashfreeOrder } = require("../Controller/SaleController")
+const { getCourseDetails, createCashfreeOrderCheckout, verifyCashfreeOrder, createRazorpayOrder, verifyRazorpayPayment } = require("../Controller/SaleController")
 const userRoute = express.Router();
 
 userRoute.post("/signin", signin);
@@ -34,6 +34,8 @@ userRoute.get("/get-course-buy-details/:courseId", authenticateAccessToken, getB
 userRoute.get("/buy-course/course/:courseId", authenticateAccessToken, getCourseDetails);
 userRoute.post("/create-cashfree-order",authenticateAccessToken, createCashfreeOrderCheckout);
 userRoute.post("/verify-cashfree-payment",authenticateAccessToken, verifyCashfreeOrder);
+userRoute.post("/create-razorpay-order" ,authenticateAccessToken ,createRazorpayOrder);
+userRoute.post("/verify-razorpay-payment" ,authenticateAccessToken ,verifyRazorpayPayment);
 
 
 userRoute.post("/logout", logout);

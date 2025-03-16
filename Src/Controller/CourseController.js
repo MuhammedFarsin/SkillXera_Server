@@ -468,27 +468,37 @@ const getModuleLecture = async (req, res) => {
 const getUserCourses = async (req, res) => {
   try {
     const { userId } = req.params;
+    console.log("Fetching courses for user:", userId); // Debugging
 
     const user = await User.findById(userId);
-    if (!user || !user.orders.length) {
-      return res.status(404).json({ message: "You haven’t purchased any courses yet. Start your learning journey today!" });
+    if (!user) {
+      console.log("User not found");
+      return res.status(404).json({ message: "User not found." });
     }
 
-    // Find all successful purchases
-    const payments = await Purchase.find({ 
-      cashfree_order_id: { $in: user.orders }, 
-      status: "Success" 
+    console.log("User orders:", user.orders); // Check if orders exist
+
+    if (!user.orders.length) {
+      return res.status(404).json({ message: "You haven’t purchased any courses yet." });
+    }
+
+    const payments = await Purchase.find({
+      cashfree_order_id: { $in: user.orders },
+      status: "Success",
     });
+
+    console.log("Payments found:", payments.length); // Debugging
 
     if (!payments.length) {
       return res.status(404).json({ message: "No successful purchases found." });
     }
 
-    // Fetch all purchased courses
-    const courses = await Course.find({ _id: { $in: payments.map(p => p.courseId) } });
+    const courses = await Course.find({ _id: { $in: payments.map((p) => p.courseId) } });
 
+    console.log("Courses found:", courses.length);
     res.status(200).json({ courses });
   } catch (error) {
+    console.error("Error fetching user courses:", error);
     res.status(500).json({ message: "Error fetching user courses", error });
   }
 };
