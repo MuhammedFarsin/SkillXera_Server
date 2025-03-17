@@ -468,7 +468,6 @@ const getModuleLecture = async (req, res) => {
 const getUserCourses = async (req, res) => {
   try {
     const { userId } = req.params;
-    console.log("Fetching courses for user:", userId); // Debugging
 
     const user = await User.findById(userId);
     if (!user) {
@@ -476,18 +475,14 @@ const getUserCourses = async (req, res) => {
       return res.status(404).json({ message: "User not found." });
     }
 
-    console.log("User orders:", user.orders); // Check if orders exist
-
     if (!user.orders.length) {
       return res.status(404).json({ message: "You haven’t purchased any courses yet." });
     }
 
     const payments = await Purchase.find({
-      cashfree_order_id: { $in: user.orders },
+      orderId: { $in: user.orders },
       status: "Success",
     });
-
-    console.log("Payments found:", payments.length); // Debugging
 
     if (!payments.length) {
       return res.status(404).json({ message: "No successful purchases found." });
@@ -495,7 +490,6 @@ const getUserCourses = async (req, res) => {
 
     const courses = await Course.find({ _id: { $in: payments.map((p) => p.courseId) } });
 
-    console.log("Courses found:", courses.length);
     res.status(200).json({ courses });
   } catch (error) {
     console.error("Error fetching user courses:", error);

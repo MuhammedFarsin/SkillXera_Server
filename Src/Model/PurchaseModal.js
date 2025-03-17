@@ -13,6 +13,12 @@ const PaymentSchema = new mongoose.Schema({
     default: "Pending",
   },
   createdAt: { type: Date, default: Date.now },
+  paymentMethod: {
+    type: String,
+    enum: ["Razorpay", "Cashfree"],
+    required: true,
+  },
+  
 });
 
 const Payment = mongoose.model("Payment", PaymentSchema);

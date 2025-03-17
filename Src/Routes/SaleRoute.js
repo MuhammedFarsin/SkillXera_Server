@@ -1,10 +1,12 @@
 const express = require("express");
 const saleRoute = express.Router();
 
-const { getCourseDetails, createCashfreeOrder, verifyCashfreeOrder } = require("../Controller/SaleController");
+const { getCourseDetails,SaleCreateCashfreeOrder, SaleCreateRazorpayOrder, SaleVerifyCashfreeOrder,SaleVerifyRazorpayPayment  } = require("../Controller/SaleController");
 
 saleRoute.get("/buy-course/course/:courseId", getCourseDetails);
-saleRoute.post("/create-cashfree-order", createCashfreeOrder);
-saleRoute.post("/verify-cashfree-payment", verifyCashfreeOrder);
+saleRoute.post("/salespage/create-cashfree-order", SaleCreateCashfreeOrder);
+saleRoute.post("/salespage/verify-cashfree-payment", SaleVerifyCashfreeOrder);
+saleRoute.post("/salespage/create-razorpay-order", SaleCreateRazorpayOrder);
+saleRoute.post("/salespage/verify-razorpay-payment", SaleVerifyRazorpayPayment);
 
 module.exports = saleRoute;
