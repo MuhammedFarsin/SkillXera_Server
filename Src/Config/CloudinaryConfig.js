@@ -53,7 +53,7 @@ const upload = multer({
 
 // Handle multiple files (both images and videos)
 const uploadMiddleware = upload.fields([
-  { name: "images", maxCount: 5 },
+  { name: "images", maxCount: 10 },
   { name: "video", maxCount: 1 }, // Adjust max count as needed
 ]);
 
