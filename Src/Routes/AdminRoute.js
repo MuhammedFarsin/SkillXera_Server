@@ -34,7 +34,8 @@ const {
   removeContactTag,
   getRemovingTag,
   getEditContact,
-  EditContact
+  EditContact,
+  getContactsDetails
 } = require("../Controller/CrmController");
 
 const { getPayments, deleteTransaction, resendAccessCouseLink, dashboard } = require("../Controller/SaleController")
@@ -99,6 +100,7 @@ adminRoute.get(
 
 //Contacts...
 adminRoute.get("/crm/contact/get-contacts",authenticateAccessToken,isAdmin, getContacts);
+adminRoute.get("/get-contacts-details/:id",authenticateAccessToken,isAdmin, getContactsDetails);
 adminRoute.post("/crm/contact/add-contact",authenticateAccessToken,isAdmin, addContact);
 adminRoute.delete("/crm/contact/delete-contact",authenticateAccessToken,isAdmin, deleteContact);
 adminRoute.post("/crm/contact/set-tag",authenticateAccessToken,isAdmin, addContactTag);

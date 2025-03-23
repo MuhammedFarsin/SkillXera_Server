@@ -3,25 +3,27 @@ const Payment = require("../Model/PurchaseModal");
 const Contact = require("../Model/ContactModel");
 const Lead = require("../Model/LeadModal");
 const User = require("../Model/UserModel");
+const Tag = require("../Model/TagModel");
 const dotenv = require("dotenv");
 const crypto = require("crypto");
 const axios = require("axios");
 const { Cashfree } = require("cashfree-pg");
-const Razorpay = require("razorpay")
+const Razorpay = require("razorpay");
 const { sendPaymentSuccessEmail } = require("../Utils/sendMail");
 const { generateResetToken } = require("../Config/ResetToken");
 
 dotenv.config();
 
 const razorpay = new Razorpay({
-  key_id : process.env.RAZORPAY_KEY_ID, 
-  key_secret : process.env.RAZORPAY_SECRET_ID
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_SECRET_ID,
 });
 
 if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_SECRET_ID) {
-  console.error("❌ Razorpay keys are missing. Check your environment variables.");
+  console.error(
+    "❌ Razorpay keys are missing. Check your environment variables."
+  );
 }
-
 
 if (!process.env.CASHFREE_CLIENT_ID || !process.env.CASHFREE_CLIENT_SECRET) {
   console.error("Cashfree API Keys are missing!");
@@ -140,17 +142,22 @@ const createCashfreeOrder = async (req, res) => {
       lead = await Lead.create({ username, email, phone, courseId });
     }
 
-    // Check if the contact already exists to avoid duplicate key error
-    let contact = await Contact.findOne({ email });
+    // 🔍 Check for existing Contact
+    let dropOffTag = await Tag.findOne({ name: "drop-off" });
+    if (!dropOffTag) {
+      dropOffTag = await Tag.create({ name: "drop-off" });
+    }
 
+    // 🔍 Check for existing Contact
+    let contact = await Contact.findOne({ email });
     if (!contact) {
-      contact = new Contact({
+      contact = await Contact.create({
         username,
         email,
         phone,
         statusTag: "drop-off",
+        tags: [dropOffTag._id],
       });
-      await contact.save();
     }
 
     // Generate a unique order ID
@@ -273,7 +280,7 @@ const verifyCashfreeOrder = async (req, res) => {
         orders: isPaymentSuccess ? [order_id] : [],
       });
 
-      await user.save(); 
+      await user.save();
     } else {
       if (isPaymentSuccess && !user.orders.includes(order_id)) {
         user.orders.push(order_id);
@@ -288,7 +295,6 @@ const verifyCashfreeOrder = async (req, res) => {
         await user.save();
       }
     }
-    
 
     // ✅ Save payment details
     const paymentData = {
@@ -300,16 +306,64 @@ const verifyCashfreeOrder = async (req, res) => {
       orderId: order_id,
       status: isPaymentSuccess ? "Success" : "Failed",
       createdAt: created_at,
-      paymentMethod: "Cashfree"
+      paymentMethod: "Cashfree",
     };
 
     const payment = new Payment(paymentData);
     await payment.save();
 
     // ✅ Update Contact status
+    // ✅ Update Contact status and tags
     const contact = await Contact.findOne({ email: customer_email });
+
     if (contact) {
-      contact.statusTag = isPaymentSuccess ? "Success" : "failed";
+      contact.statusTag = isPaymentSuccess ? "Success" : "Failed";
+
+      // ✅ Ensure tags array exists
+      if (!Array.isArray(contact.tags)) {
+        contact.tags = [];
+      }
+
+      // ✅ Fetch or Create required tags
+      let failedTag = await Tag.findOne({ name: "Failed" });
+      if (!failedTag) {
+        failedTag = await Tag.create({ name: "Failed" });
+      }
+
+      let successTag = await Tag.findOne({ name: "Success" });
+      if (!successTag) {
+        successTag = await Tag.create({ name: "Success" });
+      }
+
+      let dropOffTag = await Tag.findOne({ name: "drop-off" });
+
+      // ✅ Remove "Drop-off" tag if it exists
+      if (dropOffTag) {
+        contact.tags = contact.tags.filter(
+          (tag) => tag.toString() !== dropOffTag._id.toString()
+        );
+      }
+
+      if (isPaymentSuccess) {
+        // ✅ Remove "Failed" tag and add "Success"
+        contact.tags = contact.tags.filter(
+          (tag) => tag.toString() !== failedTag._id.toString()
+        );
+
+        if (!contact.tags.includes(successTag._id.toString())) {
+          contact.tags.push(successTag._id);
+        }
+      } else {
+        // ✅ Remove "Success" tag and add "Failed"
+        contact.tags = contact.tags.filter(
+          (tag) => tag.toString() !== successTag._id.toString()
+        );
+
+        if (!contact.tags.includes(failedTag._id.toString())) {
+          contact.tags.push(failedTag._id);
+        }
+      }
+
       await contact.save();
     }
 
@@ -369,9 +423,9 @@ const verifyCashfreeOrder = async (req, res) => {
 };
 const SaleCreateCashfreeOrder = async (req, res) => {
   try {
-    console.log('this is calling')
+    console.log("this is calling");
     const { amount, currency, courseId, customer_details } = req.body;
-    console.log(req.body)
+    console.log(req.body);
     if (!amount || !currency || !courseId || !customer_details) {
       return res.status(400).json({ error: "Invalid request parameters" });
     }
@@ -386,22 +440,27 @@ const SaleCreateCashfreeOrder = async (req, res) => {
       lead = await Lead.create({ username, email, phone, courseId });
     }
 
-    // Check if the contact already exists to avoid duplicate key error
-    let contact = await Contact.findOne({ email });
+    // 🔍 Check for existing Contact
+    let dropOffTag = await Tag.findOne({ name: "drop-off" });
+    if (!dropOffTag) {
+      dropOffTag = await Tag.create({ name: "drop-off" });
+    }
 
+    // 🔍 Check for existing Contact
+    let contact = await Contact.findOne({ email });
     if (!contact) {
-      contact = new Contact({
+      contact = await Contact.create({
         username,
         email,
         phone,
         statusTag: "drop-off",
+        tags: [dropOffTag._id],
       });
-      await contact.save();
     }
 
     // Generate a unique order ID
     const generatedOrderId = `ORDER_${Date.now()}`;
-    console.log('this is the courseId', courseId)
+    console.log("this is the courseId", courseId);
     const response = await axios.post(
       `${CASHFREE_BASE_URL}`,
       {
@@ -427,10 +486,8 @@ const SaleCreateCashfreeOrder = async (req, res) => {
           "x-api-version": "2022-09-01",
         },
       }
-
     );
-    console.log('this is the response ',response.data)
-
+    console.log("this is the response ", response.data);
 
     res.json({
       payment_session_id: response.data.payment_session_id,
@@ -445,9 +502,9 @@ const SaleCreateCashfreeOrder = async (req, res) => {
 
 const SaleVerifyCashfreeOrder = async (req, res) => {
   try {
-    console.log('is this calling')
+    console.log("is this calling");
     const { order_id, courseId, email } = req.body;
-    console.log(req.body)
+    console.log(req.body);
     if (!order_id) {
       return res.status(400).json({ message: "Order ID is required" });
     }
@@ -507,14 +564,13 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
     }
     console.log("Final Course ID:", finalCourseId);
 
-
     const courseDetails = await Course.findById(finalCourseId);
     if (!courseDetails) {
       return res
         .status(404)
         .json({ message: "Course not found", status: "failed" });
     }
-    console.log(courseDetails)
+    console.log(courseDetails);
     let user = await User.findOne({ email: customer_email });
 
     let resetLink = null;
@@ -526,7 +582,7 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
         orders: isPaymentSuccess ? [order_id] : [],
       });
 
-      await user.save(); 
+      await user.save();
     } else {
       if (isPaymentSuccess && !user.orders.includes(order_id)) {
         user.orders.push(order_id);
@@ -541,7 +597,6 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
         await user.save();
       }
     }
-    
 
     // ✅ Save payment details
     const paymentData = {
@@ -553,16 +608,63 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
       orderId: order_id,
       status: isPaymentSuccess ? "Success" : "Failed",
       createdAt: created_at,
-      paymentMethod: "Cashfree"
+      paymentMethod: "Cashfree",
     };
 
     const payment = new Payment(paymentData);
     await payment.save();
 
-    // ✅ Update Contact status
+    // ✅ Update Contact status and tags
     const contact = await Contact.findOne({ email: customer_email });
+
     if (contact) {
-      contact.statusTag = isPaymentSuccess ? "Success" : "failed";
+      contact.statusTag = isPaymentSuccess ? "Success" : "Failed";
+
+      // ✅ Ensure tags array exists
+      if (!Array.isArray(contact.tags)) {
+        contact.tags = [];
+      }
+
+      // ✅ Fetch or Create required tags
+      let failedTag = await Tag.findOne({ name: "Failed" });
+      if (!failedTag) {
+        failedTag = await Tag.create({ name: "Failed" });
+      }
+
+      let successTag = await Tag.findOne({ name: "Success" });
+      if (!successTag) {
+        successTag = await Tag.create({ name: "Success" });
+      }
+
+      let dropOffTag = await Tag.findOne({ name: "drop-off" });
+
+      // ✅ Remove "Drop-off" tag if it exists
+      if (dropOffTag) {
+        contact.tags = contact.tags.filter(
+          (tag) => tag.toString() !== dropOffTag._id.toString()
+        );
+      }
+
+      if (isPaymentSuccess) {
+        // ✅ Remove "Failed" tag and add "Success"
+        contact.tags = contact.tags.filter(
+          (tag) => tag.toString() !== failedTag._id.toString()
+        );
+
+        if (!contact.tags.includes(successTag._id.toString())) {
+          contact.tags.push(successTag._id);
+        }
+      } else {
+        // ✅ Remove "Success" tag and add "Failed"
+        contact.tags = contact.tags.filter(
+          (tag) => tag.toString() !== successTag._id.toString()
+        );
+
+        if (!contact.tags.includes(failedTag._id.toString())) {
+          contact.tags.push(failedTag._id);
+        }
+      }
+
       await contact.save();
     }
 
@@ -659,18 +761,22 @@ const deleteTransaction = async (req, res) => {
   }
 };
 
-
 const createRazorpayOrder = async (req, res) => {
   try {
     const { amount, currency, courseId, customer_details } = req.body;
 
     // 🛑 Improved Validation
-    if (typeof amount !== "number" || !currency || !courseId || !customer_details) {
+    if (
+      typeof amount !== "number" ||
+      !currency ||
+      !courseId ||
+      !customer_details
+    ) {
       return res.status(400).json({ error: "Invalid request parameters" });
     }
 
     const { username, email, phone } = customer_details;
-    console.log(customer_details)
+    console.log(customer_details);
 
     // 🔍 Check for existing Lead
     let lead = await Lead.findOne({ email, courseId });
@@ -679,9 +785,21 @@ const createRazorpayOrder = async (req, res) => {
     }
 
     // 🔍 Check for existing Contact
+    let dropOffTag = await Tag.findOne({ name: "drop-off" });
+    if (!dropOffTag) {
+      dropOffTag = await Tag.create({ name: "drop-off" });
+    }
+
+    // 🔍 Check for existing Contact
     let contact = await Contact.findOne({ email });
     if (!contact) {
-      contact = await Contact.create({ username, email, phone, statusTag: "drop-off" });
+      contact = await Contact.create({
+        username,
+        email,
+        phone,
+        statusTag: "drop-off",
+        tags: [dropOffTag._id],
+      });
     }
 
     // 💰 Convert amount to paise
@@ -696,31 +814,36 @@ const createRazorpayOrder = async (req, res) => {
         username,
         email,
         phone,
-        courseId
-      }
+        courseId,
+      },
     };
-    
 
     const order = await razorpay.orders.create(options);
     console.log("✅ Order:", order);
 
     res.status(200).json({ data: order });
-
   } catch (error) {
     console.error("❌ Razorpay Error Details:", error.error || error);
-    res.status(500).json({ 
-      error: error.error?.description || "Payment gateway error" 
+    res.status(500).json({
+      error: error.error?.description || "Payment gateway error",
     });
   }
 };
 
 const verifyRazorpayPayment = async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, courseId } = req.body;
-    console.log(req.body)
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      courseId,
+    } = req.body;
+    console.log(req.body);
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ success: false, message: "Invalid Payment Details" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid Payment Details" });
     }
     const razorpayOrder = await razorpay.orders.fetch(razorpay_order_id);
     console.log("✅ Razorpay Order Details:", razorpayOrder);
@@ -728,21 +851,25 @@ const verifyRazorpayPayment = async (req, res) => {
     const { username, email } = razorpayOrder.notes;
     const phone = Number(razorpayOrder.notes.phone);
 
-
-
     const generated_signature = crypto
-    .createHmac("sha256", process.env.RAZORPAY_SECRET_ID)
-    .update(String(razorpay_order_id) + "|" + String(razorpay_payment_id))
-    .digest("hex");
-  
+      .createHmac("sha256", process.env.RAZORPAY_SECRET_ID)
+      .update(String(razorpay_order_id) + "|" + String(razorpay_payment_id))
+      .digest("hex");
+
     const isPaymentSuccess = generated_signature === razorpay_signature;
-    
+
     if (!isPaymentSuccess) {
-      return res.status(400).json({ success: false, message: "Payment Verification Failed" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Payment Verification Failed" });
     }
 
     // ✅ Check if the user already paid for the course
-    const existingPayment = await Payment.findOne({ email, courseId, status: "Success" });
+    const existingPayment = await Payment.findOne({
+      email,
+      courseId,
+      status: "Success",
+    });
 
     if (existingPayment) {
       return res.status(201).json({
@@ -755,7 +882,9 @@ const verifyRazorpayPayment = async (req, res) => {
     // ✅ Fetch course details
     const courseDetails = await Course.findById(courseId);
     if (!courseDetails) {
-      return res.status(404).json({ message: "Course not found", status: "failed" });
+      return res
+        .status(404)
+        .json({ message: "Course not found", status: "failed" });
     }
 
     // ✅ Check if user exists
@@ -810,7 +939,12 @@ const verifyRazorpayPayment = async (req, res) => {
     }
 
     // ✅ Send success email
-    await sendPaymentSuccessEmail(user, email, courseDetails, razorpay_order_id);
+    await sendPaymentSuccessEmail(
+      user,
+      email,
+      courseDetails,
+      razorpay_order_id
+    );
 
     // ✅ Track with Facebook Pixel
     const fbPixelData = {
@@ -820,7 +954,6 @@ const verifyRazorpayPayment = async (req, res) => {
       user_data: {
         em: [hash(email)],
         ph: user.phone ? [hash(String(user.phone))] : [],
-
       },
       custom_data: {
         value: courseDetails.regularPrice,
@@ -832,7 +965,7 @@ const verifyRazorpayPayment = async (req, res) => {
       },
       action_source: "website",
     };
-    console.log('this is the fb pixelData',fbPixelData)
+    console.log("this is the fb pixelData", fbPixelData);
 
     const fbResponse = await axios.post(
       `https://graph.facebook.com/v18.0/${process.env.FB_PIXEL_ID}/events?access_token=${process.env.FB_ACCESS_TOKEN}`,
@@ -849,22 +982,29 @@ const verifyRazorpayPayment = async (req, res) => {
       resetLink,
     });
   } catch (error) {
-    console.error("Razorpay Payment Verification Error:", error.message || error);
+    console.error(
+      "Razorpay Payment Verification Error:",
+      error.message || error
+    );
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 const SaleCreateRazorpayOrder = async (req, res) => {
   try {
-    console.log('this is calling')
     const { amount, currency, courseId, customer_details } = req.body;
 
     // 🛑 Improved Validation
-    if (typeof amount !== "number" || !currency || !courseId || !customer_details) {
+    if (
+      typeof amount !== "number" ||
+      !currency ||
+      !courseId ||
+      !customer_details
+    ) {
       return res.status(400).json({ error: "Invalid request parameters" });
     }
 
     const { username, email, phone } = customer_details;
-    console.log(customer_details)
+    console.log(customer_details);
 
     // 🔍 Check for existing Lead
     let lead = await Lead.findOne({ email, courseId });
@@ -873,9 +1013,21 @@ const SaleCreateRazorpayOrder = async (req, res) => {
     }
 
     // 🔍 Check for existing Contact
+    let dropOffTag = await Tag.findOne({ name: "drop-off" });
+    if (!dropOffTag) {
+      dropOffTag = await Tag.create({ name: "drop-off" });
+    }
+
+    // 🔍 Check for existing Contact
     let contact = await Contact.findOne({ email });
     if (!contact) {
-      contact = await Contact.create({ username, email, phone, statusTag: "drop-off" });
+      contact = await Contact.create({
+        username,
+        email,
+        phone,
+        statusTag: "drop-off",
+        tags: [dropOffTag._id],
+      });
     }
 
     // 💰 Convert amount to paise
@@ -890,53 +1042,136 @@ const SaleCreateRazorpayOrder = async (req, res) => {
         username,
         email,
         phone,
-        courseId
-      }
+        courseId,
+      },
     };
-    
 
     const order = await razorpay.orders.create(options);
     console.log("✅ Order:", order);
 
     res.status(200).json({ data: order });
-
   } catch (error) {
     console.error("❌ Razorpay Error Details:", error.error || error);
-    res.status(500).json({ 
-      error: error.error?.description || "Payment gateway error" 
+    res.status(500).json({
+      error: error.error?.description || "Payment gateway error",
     });
   }
 };
 
 const SaleVerifyRazorpayPayment = async (req, res) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, courseId } = req.body;
-    console.log(req.body)
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      courseId,
+    } = req.body;
+    console.log(req.body);
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ success: false, message: "Invalid Payment Details" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid Payment Details" });
     }
+
     const razorpayOrder = await razorpay.orders.fetch(razorpay_order_id);
     console.log("✅ Razorpay Order Details:", razorpayOrder);
 
     const { username, email } = razorpayOrder.notes;
     const phone = Number(razorpayOrder.notes.phone);
 
-
-
+    // ✅ Generate & verify signature
     const generated_signature = crypto
-    .createHmac("sha256", process.env.RAZORPAY_SECRET_ID)
-    .update(String(razorpay_order_id) + "|" + String(razorpay_payment_id))
-    .digest("hex");
-  
+      .createHmac("sha256", process.env.RAZORPAY_SECRET_ID)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+
     const isPaymentSuccess = generated_signature === razorpay_signature;
-    
-    if (!isPaymentSuccess) {
-      return res.status(400).json({ success: false, message: "Payment Verification Failed" });
+
+    // ✅ Fetch course details
+    const courseDetails = await Course.findById(courseId);
+    if (!courseDetails) {
+      return res
+        .status(404)
+        .json({ message: "Course not found", status: "failed" });
     }
 
-    // ✅ Check if the user already paid for the course
-    const existingPayment = await Payment.findOne({ email, courseId, status: "Success" });
+    // ✅ Check if the user exists
+    let user = await User.findOne({ email });
+    let resetLink = null;
+
+    if (!user) {
+      user = new User({ username, email, phone, orders: [] });
+      await user.save();
+    }
+
+    // ✅ Handle **FAILED** payments
+    if (!isPaymentSuccess) {
+      console.log(
+        "❌ Payment verification failed for order:",
+        razorpay_order_id
+      );
+
+      // Save failed payment details
+      const failedPayment = new Payment({
+        username,
+        email,
+        phone,
+        courseId,
+        amount: courseDetails.regularPrice,
+        orderId: razorpay_order_id,
+        status: "Failed",
+        createdAt: new Date(),
+        paymentMethod: "Razorpay",
+      });
+
+      await failedPayment.save();
+
+      // Fetch the "Drop-off" tag
+      let failedTag = await Tag.findOne({ name: "Failed" });
+      if (!failedTag) {
+        failedTag = await Tag.create({ name: "Failed" });
+      }
+      let dropOffTag = await Tag.findOne({ name: "drop-off" });
+
+      // Fetch or create the "Failed" tag
+
+      // ✅ Update contact status and tag
+      const contact = await Contact.findOne({ email });
+
+      if (contact) {
+        contact.statusTag = "Failed";
+
+        if (!Array.isArray(contact.tags)) {
+          contact.tags = [];
+        }
+
+        if (dropOffTag) {
+          contact.tags = contact.tags.filter(
+            (tag) => tag.toString() !== dropOffTag._id.toString()
+          );
+        }
+
+        if (!contact.tags.includes(failedTag._id)) {
+          contact.tags.push(failedTag._id);
+        }
+
+        await contact.save();
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: "Payment verification failed",
+        status: "failed",
+        payment: failedPayment,
+      });
+    }
+
+    const existingPayment = await Payment.findOne({
+      email,
+      courseId,
+      status: "Success",
+    });
 
     if (existingPayment) {
       return res.status(201).json({
@@ -946,42 +1181,8 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
       });
     }
 
-    // ✅ Fetch course details
-    const courseDetails = await Course.findById(courseId);
-    if (!courseDetails) {
-      return res.status(404).json({ message: "Course not found", status: "failed" });
-    }
-
-    // ✅ Check if user exists
-    let user = await User.findOne({ email });
-
-    let resetLink = null;
-    if (!user) {
-      user = new User({
-        username,
-        email,
-        phone,
-        orders: [razorpay_order_id],
-      });
-
-      await user.save();
-    } else {
-      if (!user.orders.includes(razorpay_order_id)) {
-        user.orders.push(razorpay_order_id);
-        await user.save();
-      }
-    }
-
-    if (!user.password) {
-      const resetToken = await generateResetToken(user);
-      if (resetToken) {
-        resetLink = `${process.env.FRONTEND_URL}/set-password?token=${resetToken}&email=${email}`;
-        await user.save();
-      }
-    }
-
-    // ✅ Save payment details
-    const paymentData = {
+    // ✅ Save successful payment
+    const payment = new Payment({
       username,
       email,
       phone,
@@ -991,20 +1192,63 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
       status: "Success",
       createdAt: new Date(),
       paymentMethod: "Razorpay",
-    };
+    });
 
-    const payment = new Payment(paymentData);
     await payment.save();
 
-    // ✅ Update Contact status
+    // ✅ Update user's orders
+    if (!user.orders.includes(razorpay_order_id)) {
+      user.orders.push(razorpay_order_id);
+      await user.save();
+    }
+
+    // ✅ Generate reset password link if user has no password
+    if (!user.password) {
+      const resetToken = await generateResetToken(user);
+      if (resetToken) {
+        resetLink = `${process.env.FRONTEND_URL}/set-password?token=${resetToken}&email=${email}`;
+        await user.save();
+      }
+    }
+
+    // Fetch the "Success" tag
+    let successTag = await Tag.findOne({ name: "Success" });
+    if (!successTag) {
+      successTag = await Tag.create({ name: "Success" });
+    }
+
+    // Fetch the "Drop-off" tag
+    let dropOffTag = await Tag.findOne({ name: "drop-off" });
+
     const contact = await Contact.findOne({ email });
+
     if (contact) {
       contact.statusTag = "Success";
+
+      // Ensure tags array exists
+      if (!Array.isArray(contact.tags)) {
+        contact.tags = [];
+      }
+
+      if (dropOffTag) {
+        contact.tags = contact.tags.map((tag) =>
+          tag.toString() === dropOffTag._id.toString() ? successTag._id : tag
+        );
+      }
+
+      if (!contact.tags.includes(successTag._id)) {
+        contact.tags.push(successTag._id);
+      }
+
       await contact.save();
     }
 
-    // ✅ Send success email
-    await sendPaymentSuccessEmail(user, email, courseDetails, razorpay_order_id);
+    await sendPaymentSuccessEmail(
+      user,
+      email,
+      courseDetails,
+      razorpay_order_id
+    );
 
     // ✅ Track with Facebook Pixel
     const fbPixelData = {
@@ -1014,7 +1258,6 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
       user_data: {
         em: [hash(email)],
         ph: user.phone ? [hash(String(user.phone))] : [],
-
       },
       custom_data: {
         value: courseDetails.salesPrice,
@@ -1026,14 +1269,15 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
       },
       action_source: "website",
     };
-    console.log('this is the fb pixelData',fbPixelData)
+
+    console.log("📢 Facebook Pixel Data:", fbPixelData);
 
     const fbResponse = await axios.post(
       `https://graph.facebook.com/v18.0/${process.env.FB_PIXEL_ID}/events?access_token=${process.env.FB_ACCESS_TOKEN}`,
       { data: [fbPixelData] }
     );
 
-    console.log("Facebook Pixel Response:", fbResponse.data);
+    console.log("✅ Facebook Pixel Response:", fbResponse.data);
 
     return res.json({
       message: "Payment verified, course details sent, and event tracked",
@@ -1043,7 +1287,10 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
       resetLink,
     });
   } catch (error) {
-    console.error("Razorpay Payment Verification Error:", error.message || error);
+    console.error(
+      "❌ Razorpay Payment Verification Error:",
+      error.message || error
+    );
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
@@ -1114,5 +1361,5 @@ module.exports = {
   createRazorpayOrder,
   verifyRazorpayPayment,
   SaleCreateRazorpayOrder,
-  SaleVerifyRazorpayPayment
+  SaleVerifyRazorpayPayment,
 };

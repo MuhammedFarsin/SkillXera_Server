@@ -21,6 +21,23 @@ res.status(200).json(nonAdminContacts);
   }
 };
 
+const getContactsDetails = async (req, res) => {
+  try {
+    const { id } = req.params
+    const contact = await Contact.findById(id);
+
+    // If contact not found
+    if (!contact) {
+      return res.status(404).json({ message: "Contact not found" });
+    }
+
+    // Return contact details
+    res.status(200).json(contact);
+    
+  } catch (error) {
+    res.status(500).json({ message : "Internal Server Error..." })
+  }
+}
 
 
 const addContact = async (req, res) => {
@@ -272,5 +289,6 @@ module.exports = {
   removeContactTag,
   getRemovingTag,
   getEditContact,
-  EditContact
+  EditContact,
+  getContactsDetails
 };
