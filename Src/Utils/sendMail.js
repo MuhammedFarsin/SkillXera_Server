@@ -35,8 +35,7 @@ const sendOtpEmail = async (toEmail, otp) => {
   }
 };
 
-const sendPaymentSuccessEmail = async (user, toEmail, courseDetails, paymentId) => {
-  console.log(user);
+const sendPaymentSuccessEmail = async (user, toEmail, courseDetails, paymentId, invoicePath) => {
 
   try {
     let additionalContent = "";
@@ -68,12 +67,12 @@ const sendPaymentSuccessEmail = async (user, toEmail, courseDetails, paymentId) 
         <h3><span style='color: #23a925;'>SkillXera</span></h3>
         <h5>🎉 Congratulations! Your payment was successful.</h5>
         <p>You have successfully purchased <b>${courseDetails.title}</b>.</p>
-        <p><b>Course Description:</b> ${courseDetails.description}</p>
         <p><b>Payment ID:</b> ${paymentId}</p>
         <br/>
         ${additionalContent}
         <p>We’re excited to have you onboard! 🚀</p>
       `,
+      attachments: [{ filename: "invoice.pdf", path: invoicePath }],
     };
 
     // Send email

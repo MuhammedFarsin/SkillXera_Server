@@ -42,7 +42,7 @@ const { getPayments, deleteTransaction, resendAccessCouseLink, dashboard } = req
 
 
 // Dashboard
-adminRoute.get("/sales-data", dashboard)
+adminRoute.get("/dashboard", dashboard)
 // Get all courses...
 adminRoute.get("/assets/get-courses", authenticateAccessToken,isAdmin, getCourse);
 adminRoute.post("/assets/add-course", authenticateAccessToken,isAdmin,uploadMiddleware, createCourse);

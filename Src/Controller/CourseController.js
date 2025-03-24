@@ -529,7 +529,7 @@ const showCourses = async (req, res) => {
     }
 
     // Fetch all purchased course IDs from user's orders
-    const userOrders = await Purchase.find({ cashfree_order_id: { $in: user.orders }, status: "Success" });
+    const userOrders = await Purchase.find({ orderId: { $in: user.orders }, status: "Success" });
     const purchasedCourseIds = userOrders.map(order => order.courseId.toString());
 
     // Fetch all courses that the user has NOT purchased

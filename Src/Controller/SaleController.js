@@ -7,10 +7,12 @@ const Tag = require("../Model/TagModel");
 const dotenv = require("dotenv");
 const crypto = require("crypto");
 const axios = require("axios");
+const fs = require('fs')
 const { Cashfree } = require("cashfree-pg");
 const Razorpay = require("razorpay");
 const { sendPaymentSuccessEmail } = require("../Utils/sendMail");
 const { generateResetToken } = require("../Config/ResetToken");
+const generateInvoice = require("../Utils/generateInvoice");
 
 dotenv.config();
 
@@ -34,31 +36,35 @@ const CASHFREE_BASE_URL = "https://sandbox.cashfree.com/pg/orders"; // Sandbox U
 
 const dashboard = async (req, res) => {
   try {
-    const totalLeads = await Lead.countDocuments();
-    const totalSales = await Payment.countDocuments();
+    const { startDate, endDate } = req.query;
+    let dateFilter = {};
+
+    if (startDate && endDate) {
+      dateFilter.createdAt = {
+        $gte: new Date(startDate),
+        $lt: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
+      };
+      
+    }
+
+    const totalLeads = await Lead.countDocuments(dateFilter);
+    const totalSales = await Payment.countDocuments(dateFilter);
+
     const ordersGraphData = await Payment.aggregate([
-      {
-        $match: { status: "Success" },
-      },
+      { $match: { status: "Success", ...dateFilter } },
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, // Group by date
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
           totalOrders: { $sum: 1 },
           totalRevenue: { $sum: "$amount" },
         },
       },
-      { $sort: { _id: 1 } }, // Sort by date ascending
-      {
-        $project: {
-          _id: 0,
-          date: "$_id", // Rename _id to date
-          totalOrders: 1,
-          totalRevenue: 1,
-        },
-      },
+      { $sort: { _id: 1 } },
+      { $project: { _id: 0, date: "$_id", totalOrders: 1, totalRevenue: 1 } },
     ]);
 
     const leadsGraphData = await Lead.aggregate([
+      { $match: dateFilter },
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -66,38 +72,30 @@ const dashboard = async (req, res) => {
         },
       },
       { $sort: { _id: 1 } },
-      {
-        $project: {
-          _id: 0,
-          date: "$_id",
-          count: 1,
-        },
-      },
+      { $project: { _id: 0, date: "$_id", count: 1 } },
     ]);
-    const recentLeads = await Lead.find()
-      .sort({ createdAt: -1 }) // Sort by latest first
-      .limit(4) // Get only the last 4 leads
+
+    const recentLeads = await Lead.find(dateFilter)
+      .sort({ createdAt: -1 })
+      .limit(4)
       .select("username email phone createdAt");
 
     const totalRevenueData = await Payment.aggregate([
-      {
-        $match: { status: "Success" },
-      },
+      { $match: { status: "Success", ...dateFilter } },
       {
         $group: {
           _id: null,
-          totalRevenue: { $sum: "$amount" }, // Ensure "amount" is used
+          totalRevenue: { $sum: "$amount" },
         },
       },
     ]);
 
-    // Extract totalRevenue value safely
     const totalRevenue =
       totalRevenueData.length > 0 ? totalRevenueData[0].totalRevenue : 0;
 
     res.status(200).json({
-      ordersGraphData, // Orders and revenue by date
-      leadsGraphData, // Leads by date
+      ordersGraphData,
+      leadsGraphData,
       totalLeads,
       totalSales,
       recentLeads,
@@ -108,6 +106,7 @@ const dashboard = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error...!" });
   }
 };
+
 
 const getCourseDetails = async (req, res) => {
   try {
@@ -1242,13 +1241,17 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
 
       await contact.save();
     }
+    const invoicePath = await generateInvoice(payment, courseDetails);
 
-    await sendPaymentSuccessEmail(
-      user,
-      email,
-      courseDetails,
-      razorpay_order_id
-    );
+if (!fs.existsSync(invoicePath)) {
+  console.error("❌ Invoice file is missing:", invoicePath);
+} else {
+  console.log("✅ Invoice file exists, proceeding with email...");
+}
+
+// Now send the email
+await sendPaymentSuccessEmail(user, email, courseDetails, razorpay_order_id, invoicePath);
+
 
     // ✅ Track with Facebook Pixel
     const fbPixelData = {
@@ -1304,7 +1307,7 @@ const resendAccessCouseLink = async (req, res) => {
     }
 
     // ✅ Fetch payment details
-    const payment = await Payment.findOne({ orderId: order_id });
+    const payment = await Payment.findOne({ _id: order_id });
 
     if (!payment) {
       return res.status(404).json({ message: "Payment record not found" });
