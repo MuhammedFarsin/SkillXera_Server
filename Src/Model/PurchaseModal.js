@@ -18,6 +18,30 @@ const PaymentSchema = new mongoose.Schema({
     enum: ["Razorpay", "Cashfree"],
     required: true,
   },
+  courseSnapshot: {
+    courseId: mongoose.Schema.Types.ObjectId,
+    title: String,
+    description: String,
+    images: [String],
+    route: String,
+    buyCourse: String,
+    regularPrice: Number,
+    salesPrice: Number,
+    modules: [
+      {
+        title: String,
+        lectures: [
+          {
+            title: String,
+            description: String,
+            videoUrl: String,
+            resources: [String],
+            duration: Number,
+          }
+        ]
+      }
+    ]
+  }
   
 });
 

@@ -468,7 +468,7 @@ const getModuleLecture = async (req, res) => {
 const getUserCourses = async (req, res) => {
   try {
     const { userId } = req.params;
-
+    // Find user
     const user = await User.findById(userId);
     if (!user) {
       console.log("User not found");
@@ -479,6 +479,7 @@ const getUserCourses = async (req, res) => {
       return res.status(404).json({ message: "You haven’t purchased any courses yet." });
     }
 
+    // Find successful purchases
     const payments = await Purchase.find({
       orderId: { $in: user.orders },
       status: "Success",
@@ -488,9 +489,18 @@ const getUserCourses = async (req, res) => {
       return res.status(404).json({ message: "No successful purchases found." });
     }
 
-    const courses = await Course.find({ _id: { $in: payments.map((p) => p.courseId) } });
+    const courses = payments.map((payment) => ({
+      orderId: payment.orderId,
+      course: {
+        ...payment.courseSnapshot,
+        images: payment.courseSnapshot?.images || [], // Ensure images is always an array
+        modules: payment.courseSnapshot?.modules || [] // Ensure modules is always an array
+      },
+      purchaseDate: payment.createdAt,
+    }));
+    
 
-    res.status(200).json({ courses });
+    return res.status(200).json({ courses });
   } catch (error) {
     console.error("Error fetching user courses:", error);
     res.status(500).json({ message: "Error fetching user courses", error });
@@ -501,22 +511,28 @@ const getUserCourses = async (req, res) => {
 const userCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
+    const userId = req.user._id; 
 
-    if (!courseId) {
-      return res.status(400).json({ message: "CourseId not found..!" });
+    const user = await User.findById(userId);
+    if (!user || !user.orders || user.orders.length === 0) {
+      return res.status(403).json({ message: "No purchase found for this user" });
     }
 
-    const course = await Course.findById(courseId);
+    const purchase = await Purchase.findOne({ orderId: { $in: user.orders } });
 
-    if (!course) {
-      return res.status(404).json({ message: "Course not found...!" });
+    if (!purchase || !purchase.courseSnapshot) {
+      return res.status(403).json({ message: "No valid purchase found" });
     }
 
-    return res.status(200).json({ course });
+    if (purchase.courseSnapshot.courseId.toString() !== courseId) {
+      return res.status(403).json({ message: "You have not purchased this course." });
+    }
+
+    res.status(200).json(purchase.courseSnapshot);
 
   } catch (error) {
     console.error("Error fetching course:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
