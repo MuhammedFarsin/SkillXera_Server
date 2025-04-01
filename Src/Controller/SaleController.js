@@ -32,7 +32,7 @@ if (!process.env.CASHFREE_CLIENT_ID || !process.env.CASHFREE_CLIENT_SECRET) {
   process.exit(1);
 }
 
-const CASHFREE_BASE_URL = "https://sandbox.cashfree.com/pg/orders"; // Sandbox URL
+const CASHFREE_BASE_URL = process.env.CASHFREE_BASE_URL; // Sandbox URL
 
 const dashboard = async (req, res) => {
   try {
@@ -176,7 +176,7 @@ const createCashfreeOrder = async (req, res) => {
           customer_phone: phone,
         },
         order_meta: {
-          return_url: `http://localhost:5173/payment-success?order_id=${generatedOrderId}&courseId=${courseId}&email=${email}&gateway=cashfree`,
+          return_url: `${process.env.FRONTEND_URL}/payment-success?order_id=${generatedOrderId}&courseId=${courseId}&email=${email}&gateway=cashfree`,
         },
       },
       {
@@ -503,7 +503,7 @@ const SaleCreateCashfreeOrder = async (req, res) => {
           customer_phone: phone,
         },
         order_meta: {
-          return_url: `http://localhost:5173/sale/payment-success?order_id=${generatedOrderId}&courseId=${courseId}&email=${email}&gateway=cashfree`,
+          return_url: `${process.env.FRONTEND_URL}/sale/payment-success?order_id=${generatedOrderId}&courseId=${courseId}&email=${email}&gateway=cashfree`,
         },
       },
       {
