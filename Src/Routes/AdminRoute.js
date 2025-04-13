@@ -19,6 +19,8 @@ const {
   getEditLecture,
   EditLecture,
   getModuleLecture,
+  createSalesPage,
+  createCheckout
 } = require("../Controller/CourseController");
 
 const {
@@ -54,6 +56,10 @@ adminRoute.put(
   uploadMiddleware,
   updateCourse
 );
+
+//sales-page
+adminRoute.post("/create-sales-page/:courseId",uploadMiddleware, createSalesPage)
+adminRoute.post("/assets/course/create-checkout-page/:courseId", uploadMiddleware, createCheckout)
 
 //Module...
 adminRoute.get("/assets/courses/get-modules/:courseId",authenticateAccessToken,isAdmin, getModules);

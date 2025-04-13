@@ -200,7 +200,7 @@ const verifyMailForgetPassword = async (req, res) => {
 
     tempUsers[email] = { otp: generatedOtp, otpExpiresAt };
 
-    await sendOtpMail(email, generatedOtp);
+    await sendOtpEmail(email, generatedOtp);
 
     res.status(200).json({ tempUsers,message: "Reset password email sent successfully" });
     console.log(`Your OTP for ${email}:`, generatedOtp);
@@ -236,7 +236,7 @@ const verifyOtpForgetPassword = async (req, res) => {
 const resetPassword = async (req, res) => {
   try {
     const { newPassword } = req.body;
-    const { email } = req.user; 
+    const { email } = req.body; 
     if (!newPassword) {
       return res.status(400).json({ message: "New password is required." });
     }

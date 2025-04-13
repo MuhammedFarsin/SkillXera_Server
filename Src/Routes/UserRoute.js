@@ -23,7 +23,7 @@ userRoute.post("/resend-otp", resendOtp);
 userRoute.post("/verify-mail-forget-password", verifyMailForgetPassword);
 userRoute.post("/verify-otp-forget-password", verifyOtpForgetPassword);
 userRoute.post("/set-password",setPassword)
-userRoute.post("/reset-password", authenticateAccessToken, resetPassword);
+userRoute.post("/reset-password", resetPassword);
 
 userRoute.post("/refresh-token", authenticateRefreshToken, refreshToken);
 

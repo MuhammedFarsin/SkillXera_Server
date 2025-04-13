@@ -1,6 +1,8 @@
 const Course = require("../Model/CourseModel");
 const Purchase = require("../Model/PurchaseModal")
 const User = require("../Model/UserModel")
+const SalesPage = require("../Model/SalesModal")
+const CheckoutPage = require("../Model/CheckoutModal")
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
@@ -583,6 +585,78 @@ const getBuyCourseDetails = async (req, res) => {
   }
 }
 
+const createSalesPage = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const { lines, ctaText, ctaHighlight, embedCode } = req.body;
+
+    if (!Array.isArray(lines) || lines.length === 0) {
+      return res.status(400).json({ message: "At least one line is required." });
+    }
+    const mainImage = req.files["mainImage"]?.[0]?.filename;
+    const bonusImages = req.files["bonusImages"]?.map((file) => file.filename) || [];
+
+    if (!mainImage) {
+      return res.status(400).json({ message: "Main image is required" });
+    }
+
+    // Create a new SalesPage instance, including the embedCode
+    const newSalesPage = new SalesPage({
+      courseId,
+      lines,
+      ctaText,
+      ctaHighlight,
+      mainImage,
+      bonusImages,
+      embedCode,  // Add embedCode to the sales page document
+    });
+
+    await newSalesPage.save();
+
+    return res.status(201).json({
+      message: "Sales page created successfully",
+      salesPage: newSalesPage,
+    });
+  } catch (error) {
+    console.error("Error creating sales page:", error);
+    return res.status(500).json({ message: "Internal Server Error...!" });
+  }
+};
+const createCheckout = async (req, res) => {
+  try {
+    console.log("this is calling");
+    const { topHeading, subHeading } = req.body;
+    const { courseId } = req.params;
+
+    const checkoutImageFile = req.files?.checkoutImage?.[0];
+
+    const lines = Array.isArray(req.body.lines)
+      ? req.body.lines
+      : [req.body.lines];
+
+    if (!topHeading || !subHeading || !checkoutImageFile || lines.length === 0) {
+      return res.status(400).json({ message: "All fields are required." });
+    }
+
+    const newCheckout = new CheckoutPage({
+      courseId,
+      topHeading,
+      subHeading,
+      checkoutImage: checkoutImageFile.filename,
+      lines,
+    });
+
+    await newCheckout.save();
+
+    return res.status(201).json({
+      message: "Checkout page created successfully",
+      data: newCheckout,
+    });
+  } catch (error) {
+    console.error("Checkout Creation Error:", error);
+    return res.status(500).json({ message: "Internal Server Error...!" });
+  }
+};
 
 
 
@@ -608,5 +682,7 @@ module.exports = {
   getUserCourses,
   userCourse,
   showCourses,
-  getBuyCourseDetails
+  getBuyCourseDetails,
+  createSalesPage,
+  createCheckout
 };
