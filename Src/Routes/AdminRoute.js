@@ -20,6 +20,8 @@ const {
   EditLecture,
   getModuleLecture,
   createSalesPage,
+  GetSalesPage,
+  updateSalesPage,
   createCheckout
 } = require("../Controller/CourseController");
 
@@ -58,7 +60,9 @@ adminRoute.put(
 );
 
 //sales-page
+adminRoute.get("/assets/course/get-sales-page/:courseId",uploadMiddleware, GetSalesPage)
 adminRoute.post("/create-sales-page/:courseId",uploadMiddleware, createSalesPage)
+adminRoute.put("/assets/course/update-sales-page/:courseId",uploadMiddleware, updateSalesPage)
 adminRoute.post("/assets/course/create-checkout-page/:courseId", uploadMiddleware, createCheckout)
 
 //Module...

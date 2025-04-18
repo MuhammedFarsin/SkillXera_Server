@@ -1,8 +1,8 @@
 const Course = require("../Model/CourseModel");
-const Purchase = require("../Model/PurchaseModal")
-const User = require("../Model/UserModel")
-const SalesPage = require("../Model/SalesModal")
-const CheckoutPage = require("../Model/CheckoutModal")
+const Purchase = require("../Model/PurchaseModal");
+const User = require("../Model/UserModel");
+const SalesPage = require("../Model/SalesModal");
+const CheckoutPage = require("../Model/CheckoutModal");
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
@@ -18,13 +18,27 @@ const getCourse = async (req, res) => {
 };
 const createCourse = async (req, res) => {
   try {
-    const { title, description, route, buyCourse, regularPrice, salesPrice } = req.body;
-    
-    if (!title || !description || !route || !buyCourse || !regularPrice || !salesPrice || !req.files || !req.files.images) {
-      return res.status(400).json({ message: "All fields, at least 3 images, and a video are required" });
+    const { title, description, route, buyCourse, regularPrice, salesPrice } =
+      req.body;
+
+    if (
+      !title ||
+      !description ||
+      !route ||
+      !buyCourse ||
+      !regularPrice ||
+      !salesPrice ||
+      !req.files ||
+      !req.files.images
+    ) {
+      return res.status(400).json({
+        message: "All fields, at least 3 images, and a video are required",
+      });
     }
 
-    const imagePaths = req.files.images.map((file) => `/uploads/${file.filename}`);
+    const imagePaths = req.files.images.map(
+      (file) => `/uploads/${file.filename}`
+    );
 
     const existingCourse = await Course.findOne({ title });
     if (existingCourse) {
@@ -49,8 +63,6 @@ const createCourse = async (req, res) => {
   }
 };
 
-
-
 const deleteCourse = async (req, res) => {
   try {
     const courseId = req.params.Id;
@@ -64,7 +76,7 @@ const deleteCourse = async (req, res) => {
 const getEditCourse = async (req, res) => {
   try {
     const courseId = req.params.courseId;
-    console.log(courseId)
+    console.log(courseId);
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
     res.json(course);
@@ -74,15 +86,29 @@ const getEditCourse = async (req, res) => {
 };
 
 const updateCourse = async (req, res) => {
-
   try {
-    const courseId  = req.params.courseId;
-    const { title, route, buyCourse, regularPrice, salesPrice, description, existingImages } = req.body;
+    const courseId = req.params.courseId;
+    const {
+      title,
+      route,
+      buyCourse,
+      regularPrice,
+      salesPrice,
+      description,
+      existingImages,
+    } = req.body;
 
     // Ensure files exist before accessing them
-    const imageFiles = req.files?.images || []; 
+    const imageFiles = req.files?.images || [];
 
-    if (!title || !route || !buyCourse || !regularPrice || !salesPrice || !description) {
+    if (
+      !title ||
+      !route ||
+      !buyCourse ||
+      !regularPrice ||
+      !salesPrice ||
+      !description
+    ) {
       return res.status(400).json({ message: "All fields are required!" });
     }
 
@@ -92,29 +118,39 @@ const updateCourse = async (req, res) => {
     }
 
     // Parse existing images and videos from request (if sent as JSON string)
-    let parsedExistingImages = existingImages ? JSON.parse(existingImages) : existingCourse.images || [];
+    let parsedExistingImages = existingImages
+      ? JSON.parse(existingImages)
+      : existingCourse.images || [];
 
     // Fix: Append new images instead of replacing
     const newImagePaths = [
-      ...parsedExistingImages, 
-      ...imageFiles.map((file) => `/uploads/${file.filename}`)
+      ...parsedExistingImages,
+      ...imageFiles.map((file) => `/uploads/${file.filename}`),
     ];
 
     // Update the course
     const updatedCourse = await Course.findByIdAndUpdate(
       courseId,
-      { title, route, buyCourse, regularPrice, salesPrice, description, images: newImagePaths },
+      {
+        title,
+        route,
+        buyCourse,
+        regularPrice,
+        salesPrice,
+        description,
+        images: newImagePaths,
+      },
       { new: true }
     );
 
-    res.status(200).json({ message: "Course updated successfully!", course: updatedCourse });
+    res
+      .status(200)
+      .json({ message: "Course updated successfully!", course: updatedCourse });
   } catch (error) {
     console.error("Error updating course:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
-
 
 const getModules = async (req, res) => {
   try {
@@ -287,7 +323,6 @@ const addLecture = async (req, res) => {
 
     const videoPath = `/videos/${req.files.video[0].filename}`;
 
-
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
 
@@ -315,7 +350,6 @@ const addLecture = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 
 const deleteLecture = async (req, res) => {
   try {
@@ -359,18 +393,19 @@ const deleteLecture = async (req, res) => {
       });
     }
 
-    res.status(200).json({ message: "Lecture and video file deleted successfully" });
+    res
+      .status(200)
+      .json({ message: "Lecture and video file deleted successfully" });
   } catch (error) {
     console.error("Error deleting lecture:", error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
-
 const getEditLecture = async (req, res) => {
   try {
     const { courseId, moduleId, lectureId } = req.params;
-     
+
     // Find the course
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
@@ -385,7 +420,9 @@ const getEditLecture = async (req, res) => {
 
     res.status(200).json(lecture);
   } catch (error) {
-    res.status(500).json({ message: "Internal Server Error", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Internal Server Error", error: error.message });
   }
 };
 
@@ -403,22 +440,25 @@ const EditLecture = async (req, res) => {
     const lecture = module.lectures.id(lectureId);
     if (!lecture) return res.status(404).json({ message: "Lecture not found" });
 
-
     if (title) lecture.title = title;
     if (description) lecture.description = description;
-    if (duration) lecture.duration = Number(duration); 
+    if (duration) lecture.duration = Number(duration);
 
-    if (req.files && req.files.video) { 
-
+    if (req.files && req.files.video) {
       if (lecture.videoUrl) {
-        const oldVideoPath = path.join(__dirname, "..", "public", "video", lecture.videoUrl);
-        console.log(oldVideoPath)
+        const oldVideoPath = path.join(
+          __dirname,
+          "..",
+          "public",
+          "video",
+          lecture.videoUrl
+        );
+        console.log(oldVideoPath);
         if (fs.existsSync(oldVideoPath)) {
-          fs.unlinkSync(oldVideoPath); 
+          fs.unlinkSync(oldVideoPath);
         }
       }
       lecture.videoUrl = `/videos/${req.files.video[0].filename}`;
-
     }
 
     await course.save(); // Save the updated course document
@@ -445,7 +485,9 @@ const getModuleLecture = async (req, res) => {
     }
 
     // Find the module
-    const module = course.modules.find(mod => mod._id.toString() === moduleId);
+    const module = course.modules.find(
+      (mod) => mod._id.toString() === moduleId
+    );
     if (!module) return res.status(404).json({ message: "Module not found" });
 
     // Validate lectureIndex
@@ -460,7 +502,6 @@ const getModuleLecture = async (req, res) => {
 
     // Return the entire module's lectures along with the current lecture index
     res.status(200).json({ lectures: module.lectures, currentIndex: index });
-
   } catch (error) {
     console.error("Get Lecture Video Error:", error);
     res.status(500).json({ message: "Internal Server Error" });
@@ -478,7 +519,9 @@ const getUserCourses = async (req, res) => {
     }
 
     if (!user.orders.length) {
-      return res.status(404).json({ message: "You haven’t purchased any courses yet." });
+      return res
+        .status(404)
+        .json({ message: "You haven’t purchased any courses yet." });
     }
 
     // Find successful purchases
@@ -488,7 +531,9 @@ const getUserCourses = async (req, res) => {
     });
 
     if (!payments.length) {
-      return res.status(404).json({ message: "No successful purchases found." });
+      return res
+        .status(404)
+        .json({ message: "No successful purchases found." });
     }
 
     const courses = payments.map((payment) => ({
@@ -496,11 +541,10 @@ const getUserCourses = async (req, res) => {
       course: {
         ...payment.courseSnapshot,
         images: payment.courseSnapshot?.images || [], // Ensure images is always an array
-        modules: payment.courseSnapshot?.modules || [] // Ensure modules is always an array
+        modules: payment.courseSnapshot?.modules || [], // Ensure modules is always an array
       },
       purchaseDate: payment.createdAt,
     }));
-    
 
     return res.status(200).json({ courses });
   } catch (error) {
@@ -509,15 +553,16 @@ const getUserCourses = async (req, res) => {
   }
 };
 
-
 const userCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const userId = req.user._id; 
+    const userId = req.user._id;
 
     const user = await User.findById(userId);
     if (!user || !user.orders || user.orders.length === 0) {
-      return res.status(403).json({ message: "No purchase found for this user" });
+      return res
+        .status(403)
+        .json({ message: "No purchase found for this user" });
     }
 
     const purchase = await Purchase.findOne({ orderId: { $in: user.orders } });
@@ -527,11 +572,12 @@ const userCourse = async (req, res) => {
     }
 
     if (purchase.courseSnapshot.courseId.toString() !== courseId) {
-      return res.status(403).json({ message: "You have not purchased this course." });
+      return res
+        .status(403)
+        .json({ message: "You have not purchased this course." });
     }
 
     res.status(200).json(purchase.courseSnapshot);
-
   } catch (error) {
     console.error("Error fetching course:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -540,25 +586,29 @@ const userCourse = async (req, res) => {
 
 const showCourses = async (req, res) => {
   try {
-    const {userId} = req.params; // Assuming user ID is available from auth middleware
+    const { userId } = req.params; // Assuming user ID is available from auth middleware
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
     // Fetch all purchased course IDs from user's orders
-    const userOrders = await Purchase.find({ orderId: { $in: user.orders }, status: "Success" });
-    const purchasedCourseIds = userOrders.map(order => order.courseId.toString());
+    const userOrders = await Purchase.find({
+      orderId: { $in: user.orders },
+      status: "Success",
+    });
+    const purchasedCourseIds = userOrders.map((order) =>
+      order.courseId.toString()
+    );
 
     // Fetch all courses that the user has NOT purchased
     const courses = await Course.find({ _id: { $nin: purchasedCourseIds } });
-    
+
     if (!courses || courses.length === 0) {
       return res.status(200).json({ message: "No new courses available" });
     }
 
     res.status(200).json({ courses });
-
   } catch (error) {
     console.error("Error fetching courses:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -566,59 +616,220 @@ const showCourses = async (req, res) => {
 };
 const getBuyCourseDetails = async (req, res) => {
   try {
-    const { courseId } = req.params
+    const { courseId } = req.params;
 
-    if(!courseId){
-      res.status(400).json({ message : "CourseId not Found...!" })
+    if (!courseId) {
+      res.status(400).json({ message: "CourseId not Found...!" });
     }
 
-    const course = await Course.findById(courseId)
+    const course = await Course.findById(courseId);
 
-    if(!course){
-      res.status(401).json({ message : "Course did not found...!"})
+    if (!course) {
+      res.status(401).json({ message: "Course did not found...!" });
     }
 
-    res.status(200).json({ course })
-
+    res.status(200).json({ course });
   } catch (error) {
     return res.status(500).json({ message: "Internal Server Error" });
   }
-}
+};
 
 const createSalesPage = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const { lines, ctaText, ctaHighlight, embedCode } = req.body;
+    
+    // Extract all fields from request body
+    const {
+      lines,
+      section5Lines,
+      ctaText,
+      ctaHighlight,
+      embedCode,
+      smallBoxContent,
+      buttonContent,
+      checkBoxHeading,
+      FirstCheckBox,
+      secondCheckBoxHeading,
+      SecondCheckBox,
+      Topic,
+      ThirdSectionSubHeading,
+      ThirdSectionDescription,
+      AfterButtonPoints,
+      offerContent,
+      offerLimitingContent,
+      SecondCheckBoxConcluding,
+      lastPartHeading,
+      lastPartContent,
+      faq
+    } = req.body;
 
+    // Validate required fields
     if (!Array.isArray(lines) || lines.length === 0) {
-      return res.status(400).json({ message: "At least one line is required." });
+      return res.status(400).json({ message: "At least one line is required in section 1." });
     }
-    const mainImage = req.files["mainImage"]?.[0]?.filename;
-    const bonusImages = req.files["bonusImages"]?.map((file) => file.filename) || [];
 
-    if (!mainImage) {
+    if (!req.files || !req.files["mainImage"]) {
       return res.status(400).json({ message: "Main image is required" });
     }
 
-    // Create a new SalesPage instance, including the embedCode
+    const mainImage = req.files["mainImage"][0].filename;
+
+    // Process bonus images
+    let bonusImages = [];
+    if (req.files["bonusImages"]) {
+      const bonusImageFiles = req.files["bonusImages"];
+      const bonusTitles = req.body.bonusTitles ? JSON.parse(req.body.bonusTitles) : [];
+      
+      bonusImages = bonusImageFiles.map((file, index) => ({
+        image: file.filename,
+        title: bonusTitles[index] || ""
+      }));
+    }
+
+    // Parse array/object fields that might come as strings
+    const parseField = (field, defaultValue = []) => {
+      try {
+        if (typeof field === 'string') return JSON.parse(field);
+        if (Array.isArray(field) || typeof field === 'object') return field;
+        return defaultValue;
+      } catch (e) {
+        return defaultValue;
+      }
+    };
+
+    // Create the sales page document
     const newSalesPage = new SalesPage({
       courseId,
-      lines,
-      ctaText,
-      ctaHighlight,
+      // Section 1
+      lines: parseField(lines),
+      smallBoxContent,
+      buttonContent,
+      embedCode,
       mainImage,
+      
+      // Section 2
+      checkBoxHeading,
+      FirstCheckBox: parseField(FirstCheckBox),
+      
+      // Section 3
+      offerContent,
+      offerLimitingContent,
+      secondCheckBoxHeading,
+      SecondCheckBox: parseField(SecondCheckBox),
+      SecondCheckBoxConcluding,
+      Topic,
+      
+      // Section 4
+      ThirdSectionSubHeading,
+      ThirdSectionDescription: parseField(ThirdSectionDescription),
+      
+      // Section 5
+      AfterButtonPoints: {
+        description: parseField(AfterButtonPoints?.description)
+      },
       bonusImages,
-      embedCode,  // Add embedCode to the sales page document
+      section5Lines: parseField(section5Lines),
+      
+      // Section 6
+      lastPartHeading,
+      lastPartContent,
+      faq: parseField(faq),
+      
+      // CTA section
+      ctaText,
+      ctaHighlight
     });
 
+    // Save to database
     await newSalesPage.save();
 
     return res.status(201).json({
+      success: true,
       message: "Sales page created successfully",
-      salesPage: newSalesPage,
+      data: {
+        salesPageId: newSalesPage._id,
+        courseId: newSalesPage.courseId
+      }
     });
+
   } catch (error) {
     console.error("Error creating sales page:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Internal server error",
+      error: error.message 
+    });
+  }
+};
+
+const GetSalesPage = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    const salesPage = await SalesPage.findOne({ courseId });
+
+    if (!salesPage) {
+      return res.status(404).json({ message: "Sales page not found." });
+    }
+
+    return res.status(200).json(salesPage);
+  } catch (error) {
+    console.error("GetSalesPage Error:", error);
+    return res.status(500).json({ message: "Internal Server Error...!" });
+  }
+};
+
+const updateSalesPage = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    const existing = await SalesPage.findOne({ courseId });
+
+    if (!existing) {
+      return res.status(404).json({ message: "Sales page not found." });
+    }
+
+    const { ctaText, ctaHighlight, embedCode } = req.body;
+
+    // console.log(req.body);
+
+    const lines = req.body.lines;
+
+    if (!lines || !Array.isArray(lines) || lines.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "At least one line is required." });
+    }
+
+    // Handle main image if uploaded
+    let mainImageUrl = existing.mainImage;
+    if (req.files && req.files["mainImage"]) {
+      const mainImageFile = req.files["mainImage"][0];
+      mainImageUrl = `/uploads/${mainImageFile.filename}`; // Adjust path based on your setup
+    }
+
+    // Handle bonus images if uploaded
+    let bonusImageUrls = existing.bonusImages;
+    if (req.files && req.files["bonusImages"]) {
+      bonusImageUrls = req.files["bonusImages"].map(
+        (file) => `/uploads/${file.filename}`
+      );
+    }
+
+    existing.mainImage = mainImageUrl;
+    existing.bonusImages = bonusImageUrls;
+    existing.lines = lines;
+    existing.ctaText = ctaText;
+    existing.ctaHighlight = ctaHighlight;
+    existing.embedCode = embedCode;
+
+    await existing.save();
+
+    return res
+      .status(200)
+      .json({ message: "Sales page updated successfully." });
+  } catch (error) {
+    console.error("updateSalesPage Error:", error);
     return res.status(500).json({ message: "Internal Server Error...!" });
   }
 };
@@ -634,7 +845,12 @@ const createCheckout = async (req, res) => {
       ? req.body.lines
       : [req.body.lines];
 
-    if (!topHeading || !subHeading || !checkoutImageFile || lines.length === 0) {
+    if (
+      !topHeading ||
+      !subHeading ||
+      !checkoutImageFile ||
+      lines.length === 0
+    ) {
       return res.status(400).json({ message: "All fields are required." });
     }
 
@@ -658,10 +874,6 @@ const createCheckout = async (req, res) => {
   }
 };
 
-
-
-
-
 module.exports = {
   getCourse,
   createCourse,
@@ -684,5 +896,7 @@ module.exports = {
   showCourses,
   getBuyCourseDetails,
   createSalesPage,
-  createCheckout
+  GetSalesPage,
+  updateSalesPage,
+  createCheckout,
 };
