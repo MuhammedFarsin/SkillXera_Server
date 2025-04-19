@@ -19,9 +19,6 @@ const salesPageSchema = new mongoose.Schema(
       default: [],
     },
 
-    ctaText: { type: String, required: true },
-    ctaHighlight: { type: String },
-
     mainImage: {
       type: String,
       required: true,

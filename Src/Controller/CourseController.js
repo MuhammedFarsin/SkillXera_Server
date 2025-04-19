@@ -638,12 +638,9 @@ const createSalesPage = async (req, res) => {
   try {
     const { courseId } = req.params;
     
-    // Extract all fields from request body
     const {
       lines,
       section5Lines,
-      ctaText,
-      ctaHighlight,
       embedCode,
       smallBoxContent,
       buttonContent,
@@ -674,17 +671,36 @@ const createSalesPage = async (req, res) => {
 
     const mainImage = req.files["mainImage"][0].filename;
 
+    console.log("Raw bonusTitles:", req.body.bonusTitles);
+
+
     // Process bonus images
-    let bonusImages = [];
-    if (req.files["bonusImages"]) {
-      const bonusImageFiles = req.files["bonusImages"];
-      const bonusTitles = req.body.bonusTitles ? JSON.parse(req.body.bonusTitles) : [];
-      
-      bonusImages = bonusImageFiles.map((file, index) => ({
-        image: file.filename,
-        title: bonusTitles[index] || ""
-      }));
+let bonusImages = [];
+if (req.files["bonusImages"]) {
+  const bonusImageFiles = req.files["bonusImages"];
+  
+  // Handle bonus titles - they come as an array in req.body
+  let bonusTitles = [];
+  if (req.body.bonusTitles) {
+    // If it's already an array (from FormData)
+    if (Array.isArray(req.body.bonusTitles)) {
+      bonusTitles = req.body.bonusTitles;
+    } 
+    // If it's a string (might happen in some cases)
+    else if (typeof req.body.bonusTitles === 'string') {
+      try {
+        bonusTitles = JSON.parse(req.body.bonusTitles);
+      } catch (e) {
+        bonusTitles = [];
+      }
     }
+  }
+  
+  bonusImages = bonusImageFiles.map((file, index) => ({
+    image: file.filename,
+    title: bonusTitles[index] || ""
+  }));
+}
 
     // Parse array/object fields that might come as strings
     const parseField = (field, defaultValue = []) => {
@@ -735,9 +751,6 @@ const createSalesPage = async (req, res) => {
       lastPartContent,
       faq: parseField(faq),
       
-      // CTA section
-      ctaText,
-      ctaHighlight
     });
 
     // Save to database
