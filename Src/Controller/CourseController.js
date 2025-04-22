@@ -638,6 +638,7 @@ const createSalesPage = async (req, res) => {
   try {
     const { courseId } = req.params;
     
+    // Remove AfterButtonPoints from destructuring since we'll parse it separately
     const {
       lines,
       section5Lines,
@@ -651,7 +652,6 @@ const createSalesPage = async (req, res) => {
       Topic,
       ThirdSectionSubHeading,
       ThirdSectionDescription,
-      AfterButtonPoints,
       offerContent,
       offerLimitingContent,
       SecondCheckBoxConcluding,
@@ -671,47 +671,48 @@ const createSalesPage = async (req, res) => {
 
     const mainImage = req.files["mainImage"][0].filename;
 
-    console.log("Raw bonusTitles:", req.body.bonusTitles);
-
-
     // Process bonus images
-let bonusImages = [];
-if (req.files["bonusImages"]) {
-  const bonusImageFiles = req.files["bonusImages"];
-  
-  // Handle bonus titles - they come as an array in req.body
-  let bonusTitles = [];
-  if (req.body.bonusTitles) {
-    // If it's already an array (from FormData)
-    if (Array.isArray(req.body.bonusTitles)) {
-      bonusTitles = req.body.bonusTitles;
-    } 
-    // If it's a string (might happen in some cases)
-    else if (typeof req.body.bonusTitles === 'string') {
-      try {
-        bonusTitles = JSON.parse(req.body.bonusTitles);
-      } catch (e) {
-        bonusTitles = [];
+    let bonusImages = [];
+    if (req.files["bonusImages"]) {
+      const bonusImageFiles = req.files["bonusImages"];
+      let bonusTitles = [];
+      
+      if (req.body.bonusTitles) {
+        if (Array.isArray(req.body.bonusTitles)) {
+          bonusTitles = req.body.bonusTitles;
+        } 
+        else if (typeof req.body.bonusTitles === 'string') {
+          try {
+            bonusTitles = JSON.parse(req.body.bonusTitles);
+          } catch (e) {
+            bonusTitles = [];
+          }
+        }
       }
+      
+      bonusImages = bonusImageFiles.map((file, index) => ({
+        image: file.filename,
+        title: bonusTitles[index] || ""
+      }));
     }
-  }
-  
-  bonusImages = bonusImageFiles.map((file, index) => ({
-    image: file.filename,
-    title: bonusTitles[index] || ""
-  }));
-}
 
-    // Parse array/object fields that might come as strings
-    const parseField = (field, defaultValue = []) => {
+    // Enhanced parseField function
+    const parseField = (field, defaultValue = null) => {
+      if (field === undefined || field === null) return defaultValue;
+      if (typeof field === 'string' && field.trim() === '') return defaultValue;
+      
       try {
-        if (typeof field === 'string') return JSON.parse(field);
-        if (Array.isArray(field) || typeof field === 'object') return field;
-        return defaultValue;
+        if (typeof field === 'string') {
+          return JSON.parse(field);
+        }
+        return field;
       } catch (e) {
         return defaultValue;
       }
     };
+
+    // Parse AfterButtonPoints as a single unit
+    const AfterButtonPoints = parseField(req.body.AfterButtonPoints, { description: [] });
 
     // Create the sales page document
     const newSalesPage = new SalesPage({
@@ -739,10 +740,8 @@ if (req.files["bonusImages"]) {
       ThirdSectionSubHeading,
       ThirdSectionDescription: parseField(ThirdSectionDescription),
       
-      // Section 5
-      AfterButtonPoints: {
-        description: parseField(AfterButtonPoints?.description)
-      },
+      // Section 5 - Simplified handling
+      AfterButtonPoints, // Use the already parsed object
       bonusImages,
       section5Lines: parseField(section5Lines),
       
@@ -750,7 +749,6 @@ if (req.files["bonusImages"]) {
       lastPartHeading,
       lastPartContent,
       faq: parseField(faq),
-      
     });
 
     // Save to database
@@ -784,7 +782,6 @@ const GetSalesPage = async (req, res) => {
     if (!salesPage) {
       return res.status(404).json({ message: "Sales page not found." });
     }
-
     return res.status(200).json(salesPage);
   } catch (error) {
     console.error("GetSalesPage Error:", error);
@@ -795,57 +792,100 @@ const GetSalesPage = async (req, res) => {
 const updateSalesPage = async (req, res) => {
   try {
     const { courseId } = req.params;
-
     const existing = await SalesPage.findOne({ courseId });
 
     if (!existing) {
       return res.status(404).json({ message: "Sales page not found." });
     }
 
-    const { ctaText, ctaHighlight, embedCode } = req.body;
+    // Enhanced parsing function
+    const parseField = (field, defaultValue = []) => {
+      try {
+        if (typeof field === 'string') {
+          const parsed = JSON.parse(field);
+          return Array.isArray(parsed) ? parsed : defaultValue;
+        }
+        if (Array.isArray(field)) return field;
+        return defaultValue;
+      } catch (e) {
+        return defaultValue;
+      }
+    };
 
-    // console.log(req.body);
-
-    const lines = req.body.lines;
-
-    if (!lines || !Array.isArray(lines) || lines.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "At least one line is required." });
+    // Parse lines first to ensure validation passes
+    const lines = parseField(req.body.lines);
+    if (!lines || lines.length === 0) {
+      return res.status(400).json({ message: "At least one line is required." });
     }
 
-    // Handle main image if uploaded
-    let mainImageUrl = existing.mainImage;
+    // Handle main image
+    let mainImage = existing.mainImage;
     if (req.files && req.files["mainImage"]) {
-      const mainImageFile = req.files["mainImage"][0];
-      mainImageUrl = `/uploads/${mainImageFile.filename}`; // Adjust path based on your setup
+      mainImage = req.files["mainImage"][0].filename;
     }
 
-    // Handle bonus images if uploaded
-    let bonusImageUrls = existing.bonusImages;
+    // Handle bonus images
+    let bonusImages = existing.bonusImages || [];
     if (req.files && req.files["bonusImages"]) {
-      bonusImageUrls = req.files["bonusImages"].map(
-        (file) => `/uploads/${file.filename}`
-      );
+      const bonusImageFiles = req.files["bonusImages"];
+      let parsedBonusTitles = [];
+
+      if (req.body.bonusTitles) {
+        parsedBonusTitles = parseField(req.body.bonusTitles);
+      }
+
+      bonusImages = bonusImageFiles.map((file, index) => ({
+        image: file.filename,
+        title: parsedBonusTitles[index] || ""
+      }));
     }
 
-    existing.mainImage = mainImageUrl;
-    existing.bonusImages = bonusImageUrls;
+    // Update fields with proper parsing
     existing.lines = lines;
-    existing.ctaText = ctaText;
-    existing.ctaHighlight = ctaHighlight;
-    existing.embedCode = embedCode;
+    existing.section5Lines = parseField(req.body.section5Lines);
+    existing.embedCode = req.body.embedCode || "";
+    existing.smallBoxContent = req.body.smallBoxContent || "";
+    existing.buttonContent = req.body.buttonContent || "";
+    existing.checkBoxHeading = req.body.checkBoxHeading || "";
+    existing.FirstCheckBox = parseField(req.body.FirstCheckBox);
+    existing.secondCheckBoxHeading = req.body.secondCheckBoxHeading || "";
+    existing.SecondCheckBox = parseField(req.body.SecondCheckBox);
+    existing.Topic = req.body.Topic || "";
+    existing.ThirdSectionSubHeading = req.body.ThirdSectionSubHeading || "";
+    existing.ThirdSectionDescription = parseField(req.body.ThirdSectionDescription);
+    existing.AfterButtonPoints = {
+      description: parseField(req.body.AfterButtonPoints?.description)
+    };
+    existing.offerContent = req.body.offerContent || "";
+    existing.offerLimitingContent = req.body.offerLimitingContent || "";
+    existing.SecondCheckBoxConcluding = req.body.SecondCheckBoxConcluding || "";
+    existing.lastPartHeading = req.body.lastPartHeading || "";
+    existing.lastPartContent = req.body.lastPartContent || "";
+    existing.faq = parseField(req.body.faq);
+    existing.mainImage = mainImage;
+    existing.bonusImages = bonusImages;
 
     await existing.save();
 
-    return res
-      .status(200)
-      .json({ message: "Sales page updated successfully." });
+    return res.status(200).json({
+      success: true,
+      message: "Sales page updated successfully.",
+      data: {
+        salesPageId: existing._id,
+        courseId: existing.courseId
+      }
+    });
+
   } catch (error) {
-    console.error("updateSalesPage Error:", error);
-    return res.status(500).json({ message: "Internal Server Error...!" });
+    console.error("Error updating sales page:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
   }
 };
+
 const createCheckout = async (req, res) => {
   try {
     console.log("this is calling");
