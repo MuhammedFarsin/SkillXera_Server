@@ -2,6 +2,7 @@ const Course = require("../Model/CourseModel");
 const Payment = require("../Model/PurchaseModal");
 const Contact = require("../Model/ContactModel");
 const SalesPage = require("../Model/SalesModal")
+const CheckoutPage = require("../Model/CheckoutModal")
 const Lead = require("../Model/LeadModal");
 const User = require("../Model/UserModel");
 const Tag = require("../Model/TagModel");
@@ -454,30 +455,34 @@ const verifyCashfreeOrder = async (req, res) => {
 };
 const SaleCreateCashfreeOrder = async (req, res) => {
   try {
-    console.log("this is calling");
     const { amount, currency, courseId, customer_details } = req.body;
     console.log(req.body);
+
     if (!amount || !currency || !courseId || !customer_details) {
       return res.status(400).json({ error: "Invalid request parameters" });
     }
 
-    const { username, email, phone } = customer_details;
+    const { customer_name: username, customer_email: email, customer_phone: phone } = customer_details;
 
     // Check if the lead already exists
     let lead = await Lead.findOne({ email, courseId });
 
     if (!lead) {
-      // Create a new lead if not exists
-      lead = await Lead.create({ username, email, phone, courseId });
+      // Create a new lead if not exists - using the correct field names
+      lead = await Lead.create({ 
+        username, 
+        email, 
+        phone,
+        courseId 
+      });
     }
 
-    // 🔍 Check for existing Contact
+    // Rest of your existing code...
     let dropOffTag = await Tag.findOne({ name: "drop-off" });
     if (!dropOffTag) {
       dropOffTag = await Tag.create({ name: "drop-off" });
     }
 
-    // 🔍 Check for existing Contact
     let contact = await Contact.findOne({ email });
     if (!contact) {
       contact = await Contact.create({
@@ -491,7 +496,7 @@ const SaleCreateCashfreeOrder = async (req, res) => {
 
     // Generate a unique order ID
     const generatedOrderId = `ORDER_${Date.now()}`;
-    console.log("this is the courseId", courseId);
+    
     const response = await axios.post(
       `${CASHFREE_BASE_URL}`,
       {
@@ -518,7 +523,6 @@ const SaleCreateCashfreeOrder = async (req, res) => {
         },
       }
     );
-    console.log("this is the response ", response.data);
 
     res.json({
       payment_session_id: response.data.payment_session_id,
@@ -527,7 +531,10 @@ const SaleCreateCashfreeOrder = async (req, res) => {
     });
   } catch (error) {
     console.error("Cashfree API Error:", error.response?.data || error);
-    res.status(500).json({ error: "Payment initiation failed" });
+    res.status(500).json({ 
+      error: "Payment initiation failed",
+      details: error.message 
+    });
   }
 };
 
@@ -876,15 +883,14 @@ const createRazorpayOrder = async (req, res) => {
       },
     };
 
+
     const order = await razorpay.orders.create(options);
     console.log("✅ Order:", order);
 
     res.status(200).json({ data: order });
   } catch (error) {
-    console.error("❌ Razorpay Error Details:", error.error || error);
-    res.status(500).json({
-      error: error.error?.description || "Payment gateway error",
-    });
+    console.error("❌ Razorpay Error:", error); // Log full error
+  res.status(500).json({ error: error?.error?.description || "Internal Server Error" });
   }
 };
 
@@ -1172,6 +1178,8 @@ const SaleCreateRazorpayOrder = async (req, res) => {
   try {
     const { amount, currency, courseId, customer_details } = req.body;
 
+    console.log("Request Body:", req.body);
+
     // 🛑 Improved Validation
     if (
       typeof amount !== "number" ||
@@ -1182,58 +1190,64 @@ const SaleCreateRazorpayOrder = async (req, res) => {
       return res.status(400).json({ error: "Invalid request parameters" });
     }
 
+    // Validate currency
+    if (currency !== "INR") {
+      return res.status(400).json({ error: "Only INR currency supported" });
+    }
+
     const { username, email, phone } = customer_details;
-    console.log(customer_details);
 
-    // 🔍 Check for existing Lead
-    let lead = await Lead.findOne({ email, courseId });
-    if (!lead) {
-      lead = await Lead.create({ username, email, phone, courseId });
+    // 💰 Convert amount to paise and validate
+    const amountInPaise = Math.round(amount * 100);
+    if (amountInPaise < 100) {
+      return res.status(400).json({ error: "Amount must be at least ₹1" });
     }
 
-    // 🔍 Check for existing Contact
-    let dropOffTag = await Tag.findOne({ name: "drop-off" });
-    if (!dropOffTag) {
-      dropOffTag = await Tag.create({ name: "drop-off" });
-    }
+    // Create lead and contact (simplified)
+    await Lead.findOneAndUpdate(
+      { email, courseId },
+      { username, email, phone, courseId },
+      { upsert: true, new: true }
+    );
 
-    // 🔍 Check for existing Contact
-    let contact = await Contact.findOne({ email });
-    if (!contact) {
-      contact = await Contact.create({
+    const dropOffTag = await Tag.findOneAndUpdate(
+      { name: "drop-off" },
+      { name: "drop-off" },
+      { upsert: true, new: true }
+    );
+
+    await Contact.findOneAndUpdate(
+      { email },
+      {
         username,
         email,
         phone,
         statusTag: "drop-off",
-        tags: [dropOffTag._id],
-      });
-    }
-
-    // 💰 Convert amount to paise
-    const amountInPaise = Math.round(amount * 100);
+        $addToSet: { tags: dropOffTag._id }
+      },
+      { upsert: true, new: true }
+    );
 
     // 🛒 Create Razorpay Order
     const options = {
-      amount: amountInPaise,
-      currency: "INR",
+      amount: Math.max(amount * 100, 100), // Ensure minimum ₹1
+      currency: currency || "INR",
       receipt: `receipt_${Date.now()}`,
       notes: {
-        username,
-        email,
-        phone,
-        courseId,
+        ...(customer_details || {}),
+        courseId
       },
+      payment_capture: 1 // Auto-capture payments
     };
 
-    const order = await razorpay.orders.create(options);
-    console.log("✅ Order:", order);
+    console.log("options", options)
+
+    const order = await razorpay.orders.create(options)
 
     res.status(200).json({ data: order });
   } catch (error) {
-    console.error("❌ Razorpay Error Details:", error.error || error);
-    res.status(500).json({
-      error: error.error?.description || "Payment gateway error",
-    });
+    console.error("❌ Razorpay Error:", error); // Log full error
+  res.status(500).json({ error: error?.error?.description || "Internal Server Error" });
   }
 };
 
@@ -1571,6 +1585,27 @@ const resendAccessCouseLink = async (req, res) => {
   }
 };
 
+const GetCheckoutPage = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    const checkoutpage = await CheckoutPage.findOne({ courseId })
+      .populate('courseId') // This populates the course details
+      .exec();
+
+    if (!checkoutpage) {
+      return res.status(404).json({ message: "No checkout page found for this course" });
+    }
+
+    res.status(200).json({ 
+      message: "Checkout page retrieved successfully", 
+      data: checkoutpage 
+    });
+  } catch (error) {
+    console.error("Error fetching checkout page:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
 module.exports = {
   getCourseDetails  ,
   createCashfreeOrder,
@@ -1585,4 +1620,5 @@ module.exports = {
   verifyRazorpayPayment,
   SaleCreateRazorpayOrder,
   SaleVerifyRazorpayPayment,
+  GetCheckoutPage
 };

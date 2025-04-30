@@ -824,21 +824,82 @@ const updateSalesPage = async (req, res) => {
       mainImage = req.files["mainImage"][0].filename;
     }
 
-    // Handle bonus images
-    let bonusImages = existing.bonusImages || [];
-    if (req.files && req.files["bonusImages"]) {
-      const bonusImageFiles = req.files["bonusImages"];
-      let parsedBonusTitles = [];
+    // Handle bonus images - more robust implementation
+    const currentBonusImages = existing.bonusImages || [];
 
-      if (req.body.bonusTitles) {
-        parsedBonusTitles = parseField(req.body.bonusTitles);
+    // Get the submitted titles and prices
+    const existingTitles = req.body.existingBonusTitles 
+      ? (Array.isArray(req.body.existingBonusTitles) 
+          ? req.body.existingBonusTitles 
+          : JSON.parse(req.body.existingBonusTitles || '[]'))
+      : [];
+    
+    const existingPrices = req.body.existingBonusPrices 
+      ? (Array.isArray(req.body.existingBonusPrices) 
+          ? req.body.existingBonusPrices 
+          : JSON.parse(req.body.existingBonusPrices || '[]'))
+      : [];
+
+    // Rebuild the bonusImages array
+    const updatedBonusImages = [];
+    
+    // Match existing images with their updated titles/prices
+    existingTitles.forEach((title, index) => {
+      if (currentBonusImages[index]) {
+        updatedBonusImages.push({
+          image: currentBonusImages[index].image, // Keep original filename
+          title: title || "",
+          price: existingPrices[index] || ""
+        });
       }
+    });
 
-      bonusImages = bonusImageFiles.map((file, index) => ({
-        image: file.filename,
-        title: parsedBonusTitles[index] || ""
-      }));
+    // Handle new bonus images
+    if (req.files && req.files["bonusImages"]) {
+      const newTitles = req.body.newBonusTitles 
+        ? (Array.isArray(req.body.newBonusTitles) 
+            ? req.body.newBonusTitles 
+            : JSON.parse(req.body.newBonusTitles || '[]'))
+        : [];
+      
+      const newPrices = req.body.newBonusPrices 
+        ? (Array.isArray(req.body.newBonusPrices) 
+            ? req.body.newBonusPrices 
+            : JSON.parse(req.body.newBonusPrices || '[]'))
+        : [];
+
+      req.files["bonusImages"].forEach((file, index) => {
+        updatedBonusImages.push({
+          image: file.filename,
+          title: newTitles[index] || "",
+          price: newPrices[index] || ""
+        });
+      });
     }
+
+    // Update the document
+
+    const parseAfterButtonPoints = (field) => {
+      try {
+        if (typeof field === 'string') {
+          const parsed = JSON.parse(field);
+          return {
+            description: Array.isArray(parsed?.description) 
+              ? parsed.description 
+              : []
+          };
+        }
+        return {
+          description: Array.isArray(field?.description) 
+            ? field.description 
+            : []
+        };
+      } catch (e) {
+        return { description: [] };
+      }
+    };
+
+  
 
     // Update fields with proper parsing
     existing.lines = lines;
@@ -853,9 +914,7 @@ const updateSalesPage = async (req, res) => {
     existing.Topic = req.body.Topic || "";
     existing.ThirdSectionSubHeading = req.body.ThirdSectionSubHeading || "";
     existing.ThirdSectionDescription = parseField(req.body.ThirdSectionDescription);
-    existing.AfterButtonPoints = {
-      description: parseField(req.body.AfterButtonPoints?.description)
-    };
+    existing.AfterButtonPoints = parseAfterButtonPoints(req.body.AfterButtonPoints);
     existing.offerContent = req.body.offerContent || "";
     existing.offerLimitingContent = req.body.offerLimitingContent || "";
     existing.SecondCheckBoxConcluding = req.body.SecondCheckBoxConcluding || "";
@@ -863,7 +922,8 @@ const updateSalesPage = async (req, res) => {
     existing.lastPartContent = req.body.lastPartContent || "";
     existing.faq = parseField(req.body.faq);
     existing.mainImage = mainImage;
-    existing.bonusImages = bonusImages;
+    existing.bonusImages = updatedBonusImages;
+
 
     await existing.save();
 
@@ -926,6 +986,8 @@ const createCheckout = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error...!" });
   }
 };
+
+
 
 module.exports = {
   getCourse,
