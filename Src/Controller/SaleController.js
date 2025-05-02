@@ -3,6 +3,7 @@ const Payment = require("../Model/PurchaseModal");
 const Contact = require("../Model/ContactModel");
 const SalesPage = require("../Model/SalesModal")
 const CheckoutPage = require("../Model/CheckoutModal")
+const { emitNewLead } = require("../socket");
 const Lead = require("../Model/LeadModal");
 const User = require("../Model/UserModel");
 const Tag = require("../Model/TagModel");
@@ -143,6 +144,16 @@ const createCashfreeOrder = async (req, res) => {
     if (!lead) {
       // Create a new lead if not exists
       lead = await Lead.create({ username, email, phone, courseId });
+      
+      // Emit socket event for new lead
+      emitNewLead({
+        _id: lead._id,
+        username,
+        email,
+        phone,
+        courseId,
+        createdAt: lead.createdAt
+      });
     }
 
     // 🔍 Check for existing Contact
@@ -468,12 +479,17 @@ const SaleCreateCashfreeOrder = async (req, res) => {
     let lead = await Lead.findOne({ email, courseId });
 
     if (!lead) {
-      // Create a new lead if not exists - using the correct field names
-      lead = await Lead.create({ 
-        username, 
-        email, 
+      // Create a new lead if not exists
+      lead = await Lead.create({ username, email, phone, courseId });
+      
+      // Emit socket event for new lead
+      emitNewLead({
+        _id: lead._id,
+        username,
+        email,
         phone,
-        courseId 
+        courseId,
+        createdAt: lead.createdAt
       });
     }
 
@@ -845,8 +861,20 @@ const createRazorpayOrder = async (req, res) => {
 
     // 🔍 Check for existing Lead
     let lead = await Lead.findOne({ email, courseId });
+
     if (!lead) {
+      // Create a new lead if not exists
       lead = await Lead.create({ username, email, phone, courseId });
+      
+      // Emit socket event for new lead
+      emitNewLead({
+        _id: lead._id,
+        username,
+        email,
+        phone,
+        courseId,
+        createdAt: lead.createdAt
+      });
     }
 
     // 🔍 Check for existing Contact
@@ -1190,11 +1218,6 @@ const SaleCreateRazorpayOrder = async (req, res) => {
       return res.status(400).json({ error: "Invalid request parameters" });
     }
 
-    // Validate currency
-    if (currency !== "INR") {
-      return res.status(400).json({ error: "Only INR currency supported" });
-    }
-
     const { username, email, phone } = customer_details;
 
     // 💰 Convert amount to paise and validate
@@ -1204,11 +1227,22 @@ const SaleCreateRazorpayOrder = async (req, res) => {
     }
 
     // Create lead and contact (simplified)
-    await Lead.findOneAndUpdate(
-      { email, courseId },
-      { username, email, phone, courseId },
-      { upsert: true, new: true }
-    );
+    let lead = await Lead.findOne({ email, courseId });
+
+    if (!lead) {
+      // Create a new lead if not exists
+      lead = await Lead.create({ username, email, phone, courseId });
+      
+      // Emit socket event for new lead
+      emitNewLead({
+        _id: lead._id,
+        username,
+        email,
+        phone,
+        courseId,
+        createdAt: lead.createdAt
+      });
+    }
 
     const dropOffTag = await Tag.findOneAndUpdate(
       { name: "drop-off" },
@@ -1311,7 +1345,7 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
         email,
         phone,
         courseId,
-        amount: courseDetails.regularPrice,
+        amount: courseDetails.salesPrice,
         orderId: razorpay_order_id,
         status: "Failed",
         createdAt: new Date(),
@@ -1400,7 +1434,7 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
       email,
       phone,
       courseId,
-      amount: courseDetails.regularPrice,
+      amount: courseDetails.salesPrice,
       orderId: razorpay_order_id,
       status: "Success",
       createdAt: new Date(),
@@ -1518,7 +1552,7 @@ await sendPaymentSuccessEmail(user, email, courseDetails, razorpay_order_id, inv
 
     return res.json({
       message: "Payment verified, course details sent, and event tracked",
-      status: "success",
+      status: "Success",
       payment,
       user,
       resetLink,

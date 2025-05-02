@@ -671,28 +671,40 @@ const createSalesPage = async (req, res) => {
 
     const mainImage = req.files["mainImage"][0].filename;
 
-    // Process bonus images
+    // Process bonus images with titles and prices
     let bonusImages = [];
     if (req.files["bonusImages"]) {
       const bonusImageFiles = req.files["bonusImages"];
+      
+      // Parse bonus titles and prices from request body
       let bonusTitles = [];
+      let bonusPrices = [];
       
       if (req.body.bonusTitles) {
-        if (Array.isArray(req.body.bonusTitles)) {
-          bonusTitles = req.body.bonusTitles;
-        } 
-        else if (typeof req.body.bonusTitles === 'string') {
-          try {
-            bonusTitles = JSON.parse(req.body.bonusTitles);
-          } catch (e) {
-            bonusTitles = [];
-          }
+        try {
+          bonusTitles = typeof req.body.bonusTitles === 'string' 
+            ? JSON.parse(req.body.bonusTitles) 
+            : req.body.bonusTitles;
+        } catch (e) {
+          bonusTitles = [];
         }
       }
       
+      if (req.body.bonusPrices) {
+        try {
+          bonusPrices = typeof req.body.bonusPrices === 'string'
+            ? JSON.parse(req.body.bonusPrices)
+            : req.body.bonusPrices;
+        } catch (e) {
+          bonusPrices = [];
+        }
+      }
+
+      // Map files with corresponding titles and prices
       bonusImages = bonusImageFiles.map((file, index) => ({
         image: file.filename,
-        title: bonusTitles[index] || ""
+        title: bonusTitles[index] || "",
+        price: bonusPrices[index] || ""
       }));
     }
 
@@ -714,7 +726,7 @@ const createSalesPage = async (req, res) => {
     // Parse AfterButtonPoints as a single unit
     const AfterButtonPoints = parseField(req.body.AfterButtonPoints, { description: [] });
 
-    // Create the sales page document
+    // Create the sales page document with all fields including bonus prices
     const newSalesPage = new SalesPage({
       courseId,
       // Section 1
@@ -740,9 +752,9 @@ const createSalesPage = async (req, res) => {
       ThirdSectionSubHeading,
       ThirdSectionDescription: parseField(ThirdSectionDescription),
       
-      // Section 5 - Simplified handling
-      AfterButtonPoints, // Use the already parsed object
-      bonusImages,
+      // Section 5
+      AfterButtonPoints,
+      bonusImages, // Now includes price for each bonus
       section5Lines: parseField(section5Lines),
       
       // Section 6
@@ -759,7 +771,8 @@ const createSalesPage = async (req, res) => {
       message: "Sales page created successfully",
       data: {
         salesPageId: newSalesPage._id,
-        courseId: newSalesPage.courseId
+        courseId: newSalesPage.courseId,
+        bonusImages: newSalesPage.bonusImages // Include bonus images in response
       }
     });
 
@@ -772,7 +785,6 @@ const createSalesPage = async (req, res) => {
     });
   }
 };
-
 const GetSalesPage = async (req, res) => {
   try {
     const { courseId } = req.params;
