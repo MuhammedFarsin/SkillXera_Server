@@ -1,8 +1,8 @@
 const Course = require("../Model/CourseModel");
 const Payment = require("../Model/PurchaseModal");
 const Contact = require("../Model/ContactModel");
-const SalesPage = require("../Model/SalesModal")
-const CheckoutPage = require("../Model/CheckoutModal")
+const SalesPage = require("../Model/SalesModal");
+const CheckoutPage = require("../Model/CheckoutModal");
 const { emitNewLead } = require("../socket");
 const Lead = require("../Model/LeadModal");
 const User = require("../Model/UserModel");
@@ -10,7 +10,7 @@ const Tag = require("../Model/TagModel");
 const dotenv = require("dotenv");
 const crypto = require("crypto");
 const axios = require("axios");
-const fs = require('fs')
+const fs = require("fs");
 const { Cashfree } = require("cashfree-pg");
 const Razorpay = require("razorpay");
 const { sendPaymentSuccessEmail } = require("../Utils/sendMail");
@@ -47,7 +47,6 @@ const dashboard = async (req, res) => {
         $gte: new Date(startDate),
         $lt: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
       };
-      
     }
 
     const totalLeads = await Lead.countDocuments(dateFilter);
@@ -110,12 +109,13 @@ const dashboard = async (req, res) => {
   }
 };
 
-
 const getCourseDetails = async (req, res) => {
   try {
     const { courseId } = req.params;
 
-    const salesPage = await SalesPage.findOne({ courseId }).populate("courseId")
+    const salesPage = await SalesPage.findOne({ courseId }).populate(
+      "courseId"
+    );
     if (!salesPage) {
       return res.status(404).json({ message: "Sales page not found" });
     }
@@ -126,7 +126,6 @@ const getCourseDetails = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 
 const createCashfreeOrder = async (req, res) => {
   try {
@@ -144,7 +143,7 @@ const createCashfreeOrder = async (req, res) => {
     if (!lead) {
       // Create a new lead if not exists
       lead = await Lead.create({ username, email, phone, courseId });
-      
+
       // Emit socket event for new lead
       emitNewLead({
         _id: lead._id,
@@ -152,7 +151,7 @@ const createCashfreeOrder = async (req, res) => {
         email,
         phone,
         courseId,
-        createdAt: lead.createdAt
+        createdAt: lead.createdAt,
       });
     }
 
@@ -337,10 +336,10 @@ const verifyCashfreeOrder = async (req, res) => {
             description: lecture.description,
             videoUrl: lecture.videoUrl,
             resources: lecture.resources,
-            duration: lecture.duration
-          }))
-        }))
-      }
+            duration: lecture.duration,
+          })),
+        })),
+      },
     };
 
     const payment = new Payment(paymentData);
@@ -408,7 +407,6 @@ const verifyCashfreeOrder = async (req, res) => {
       console.log("✅ Invoice file exists, proceeding with email...");
     }
 
-
     // ✅ Send success email only for successful payments
     if (isPaymentSuccess) {
       await sendPaymentSuccessEmail(
@@ -467,13 +465,16 @@ const verifyCashfreeOrder = async (req, res) => {
 const SaleCreateCashfreeOrder = async (req, res) => {
   try {
     const { amount, currency, courseId, customer_details } = req.body;
-    console.log(req.body);
 
     if (!amount || !currency || !courseId || !customer_details) {
       return res.status(400).json({ error: "Invalid request parameters" });
     }
 
-    const { customer_name: username, customer_email: email, customer_phone: phone } = customer_details;
+    const {
+      customer_name: username,
+      customer_email: email,
+      customer_phone: phone,
+    } = customer_details;
 
     // Check if the lead already exists
     let lead = await Lead.findOne({ email, courseId });
@@ -481,7 +482,7 @@ const SaleCreateCashfreeOrder = async (req, res) => {
     if (!lead) {
       // Create a new lead if not exists
       lead = await Lead.create({ username, email, phone, courseId });
-      
+
       // Emit socket event for new lead
       emitNewLead({
         _id: lead._id,
@@ -489,7 +490,7 @@ const SaleCreateCashfreeOrder = async (req, res) => {
         email,
         phone,
         courseId,
-        createdAt: lead.createdAt
+        createdAt: lead.createdAt,
       });
     }
 
@@ -512,7 +513,7 @@ const SaleCreateCashfreeOrder = async (req, res) => {
 
     // Generate a unique order ID
     const generatedOrderId = `ORDER_${Date.now()}`;
-    
+
     const response = await axios.post(
       `${CASHFREE_BASE_URL}`,
       {
@@ -547,9 +548,9 @@ const SaleCreateCashfreeOrder = async (req, res) => {
     });
   } catch (error) {
     console.error("Cashfree API Error:", error.response?.data || error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: "Payment initiation failed",
-      details: error.message 
+      details: error.message,
     });
   }
 };
@@ -557,7 +558,6 @@ const SaleCreateCashfreeOrder = async (req, res) => {
 const SaleVerifyCashfreeOrder = async (req, res) => {
   try {
     const { order_id, courseId, email } = req.body;
-    console.log(req.body);
     if (!order_id) {
       return res.status(400).json({ message: "Order ID is required" });
     }
@@ -615,7 +615,6 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
         status: "failed",
       });
     }
-    console.log("Final Course ID:", finalCourseId);
 
     const courseDetails = await Course.findById(finalCourseId);
     if (!courseDetails) {
@@ -623,7 +622,6 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
         .status(404)
         .json({ message: "Course not found", status: "failed" });
     }
-    console.log(courseDetails);
     let user = await User.findOne({ email: customer_email });
 
     let resetLink = null;
@@ -678,10 +676,10 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
             description: lecture.description,
             videoUrl: lecture.videoUrl,
             resources: lecture.resources,
-            duration: lecture.duration
-          }))
-        }))
-      }
+            duration: lecture.duration,
+          })),
+        })),
+      },
     };
 
     const payment = new Payment(paymentData);
@@ -742,12 +740,6 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
     }
     const invoicePath = await generateInvoice(payment, courseDetails);
 
-    if (!fs.existsSync(invoicePath)) {
-      console.error("❌ Invoice file is missing:", invoicePath);
-    } else {
-      console.log("✅ Invoice file exists, proceeding with email...");
-    }
-    
     // Now send the email
     if (isPaymentSuccess) {
       await sendPaymentSuccessEmail(
@@ -782,11 +774,9 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
         `https://graph.facebook.com/v18.0/${process.env.FB_PIXEL_ID}/events?access_token=${process.env.FB_ACCESS_TOKEN}`,
         { data: [fbPixelData] }
       );
-
-      console.log("Facebook Pixel Response:", fbResponse.data);
     }
 
-    return res.json({
+    return res.status(200).json({
       message: isPaymentSuccess
         ? "Payment verified, course details sent, and event tracked"
         : "Payment verification failed",
@@ -803,8 +793,6 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
-// ✅ Hash function for user data encryption
 
 const hash = (data) => {
   return crypto.createHash("sha256").update(data).digest("hex");
@@ -865,7 +853,7 @@ const createRazorpayOrder = async (req, res) => {
     if (!lead) {
       // Create a new lead if not exists
       lead = await Lead.create({ username, email, phone, courseId });
-      
+
       // Emit socket event for new lead
       emitNewLead({
         _id: lead._id,
@@ -873,7 +861,7 @@ const createRazorpayOrder = async (req, res) => {
         email,
         phone,
         courseId,
-        createdAt: lead.createdAt
+        createdAt: lead.createdAt,
       });
     }
 
@@ -911,14 +899,15 @@ const createRazorpayOrder = async (req, res) => {
       },
     };
 
-
     const order = await razorpay.orders.create(options);
     console.log("✅ Order:", order);
 
     res.status(200).json({ data: order });
   } catch (error) {
     console.error("❌ Razorpay Error:", error); // Log full error
-  res.status(500).json({ error: error?.error?.description || "Internal Server Error" });
+    res
+      .status(500)
+      .json({ error: error?.error?.description || "Internal Server Error" });
   }
 };
 
@@ -1003,10 +992,10 @@ const verifyRazorpayPayment = async (req, res) => {
               description: lecture.description,
               videoUrl: lecture.videoUrl,
               resources: lecture.resources,
-              duration: lecture.duration
-            }))
-          }))
-        }
+              duration: lecture.duration,
+            })),
+          })),
+        },
       });
 
       await failedPayment.save();
@@ -1092,10 +1081,10 @@ const verifyRazorpayPayment = async (req, res) => {
             description: lecture.description,
             videoUrl: lecture.videoUrl,
             resources: lecture.resources,
-            duration: lecture.duration
-          }))
-        }))
-      }
+            duration: lecture.duration,
+          })),
+        })),
+      },
     });
 
     await payment.save();
@@ -1148,15 +1137,20 @@ const verifyRazorpayPayment = async (req, res) => {
     }
     const invoicePath = await generateInvoice(payment, courseDetails);
 
-if (!fs.existsSync(invoicePath)) {
-  console.error("❌ Invoice file is missing:", invoicePath);
-} else {
-  console.log("✅ Invoice file exists, proceeding with email...");
-}
+    if (!fs.existsSync(invoicePath)) {
+      console.error("❌ Invoice file is missing:", invoicePath);
+    } else {
+      console.log("✅ Invoice file exists, proceeding with email...");
+    }
 
-// Now send the email
-await sendPaymentSuccessEmail(user, email, courseDetails, razorpay_order_id, invoicePath);
-
+    // Now send the email
+    await sendPaymentSuccessEmail(
+      user,
+      email,
+      courseDetails,
+      razorpay_order_id,
+      invoicePath
+    );
 
     // ✅ Track with Facebook Pixel
     const fbPixelData = {
@@ -1206,9 +1200,6 @@ const SaleCreateRazorpayOrder = async (req, res) => {
   try {
     const { amount, currency, courseId, customer_details } = req.body;
 
-    console.log("Request Body:", req.body);
-
-    // 🛑 Improved Validation
     if (
       typeof amount !== "number" ||
       !currency ||
@@ -1232,7 +1223,7 @@ const SaleCreateRazorpayOrder = async (req, res) => {
     if (!lead) {
       // Create a new lead if not exists
       lead = await Lead.create({ username, email, phone, courseId });
-      
+
       // Emit socket event for new lead
       emitNewLead({
         _id: lead._id,
@@ -1240,7 +1231,7 @@ const SaleCreateRazorpayOrder = async (req, res) => {
         email,
         phone,
         courseId,
-        createdAt: lead.createdAt
+        createdAt: lead.createdAt,
       });
     }
 
@@ -1257,7 +1248,7 @@ const SaleCreateRazorpayOrder = async (req, res) => {
         email,
         phone,
         statusTag: "drop-off",
-        $addToSet: { tags: dropOffTag._id }
+        $addToSet: { tags: dropOffTag._id },
       },
       { upsert: true, new: true }
     );
@@ -1269,19 +1260,19 @@ const SaleCreateRazorpayOrder = async (req, res) => {
       receipt: `receipt_${Date.now()}`,
       notes: {
         ...(customer_details || {}),
-        courseId
+        courseId,
       },
-      payment_capture: 1 // Auto-capture payments
+      payment_capture: 1, // Auto-capture payments
     };
 
-    console.log("options", options)
-
-    const order = await razorpay.orders.create(options)
+     const order = await razorpay.orders.create(options);
 
     res.status(200).json({ data: order });
   } catch (error) {
     console.error("❌ Razorpay Error:", error); // Log full error
-  res.status(500).json({ error: error?.error?.description || "Internal Server Error" });
+    res
+      .status(500)
+      .json({ error: error?.error?.description || "Internal Server Error" });
   }
 };
 
@@ -1293,7 +1284,6 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
       razorpay_signature,
       courseId,
     } = req.body;
-    console.log(req.body);
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res
@@ -1302,12 +1292,10 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
     }
 
     const razorpayOrder = await razorpay.orders.fetch(razorpay_order_id);
-    console.log("✅ Razorpay Order Details:", razorpayOrder);
 
     const { username, email } = razorpayOrder.notes;
     const phone = Number(razorpayOrder.notes.phone);
 
-    // ✅ Generate & verify signature
     const generated_signature = crypto
       .createHmac("sha256", process.env.RAZORPAY_SECRET_ID)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -1315,7 +1303,6 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
 
     const isPaymentSuccess = generated_signature === razorpay_signature;
 
-    // ✅ Fetch course details
     const courseDetails = await Course.findById(courseId);
     if (!courseDetails) {
       return res
@@ -1323,7 +1310,6 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
         .json({ message: "Course not found", status: "failed" });
     }
 
-    // ✅ Check if the user exists
     let user = await User.findOne({ email });
     let resetLink = null;
 
@@ -1332,14 +1318,12 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
       await user.save();
     }
 
-    // ✅ Handle **FAILED** payments
     if (!isPaymentSuccess) {
       console.log(
         "❌ Payment verification failed for order:",
         razorpay_order_id
       );
 
-      // Save failed payment details
       const failedPayment = new Payment({
         username,
         email,
@@ -1366,24 +1350,20 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
               description: lecture.description,
               videoUrl: lecture.videoUrl,
               resources: lecture.resources,
-              duration: lecture.duration
-            }))
-          }))
-        }
+              duration: lecture.duration,
+            })),
+          })),
+        },
       });
 
       await failedPayment.save();
 
-      // Fetch the "Drop-off" tag
       let failedTag = await Tag.findOne({ name: "Failed" });
       if (!failedTag) {
         failedTag = await Tag.create({ name: "Failed" });
       }
       let dropOffTag = await Tag.findOne({ name: "drop-off" });
 
-      // Fetch or create the "Failed" tag
-
-      // ✅ Update contact status and tag
       const contact = await Contact.findOne({ email });
 
       if (contact) {
@@ -1428,7 +1408,6 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
       });
     }
 
-    // ✅ Save successful payment
     const payment = new Payment({
       username,
       email,
@@ -1455,21 +1434,19 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
             description: lecture.description,
             videoUrl: lecture.videoUrl,
             resources: lecture.resources,
-            duration: lecture.duration
-          }))
-        }))
-      }
+            duration: lecture.duration,
+          })),
+        })),
+      },
     });
 
     await payment.save();
 
-    // ✅ Update user's orders
     if (!user.orders.includes(razorpay_order_id)) {
       user.orders.push(razorpay_order_id);
       await user.save();
     }
 
-    // ✅ Generate reset password link if user has no password
     if (!user.password) {
       const resetToken = await generateResetToken(user);
       if (resetToken) {
@@ -1478,13 +1455,11 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
       }
     }
 
-    // Fetch the "Success" tag
     let successTag = await Tag.findOne({ name: "Success" });
     if (!successTag) {
       successTag = await Tag.create({ name: "Success" });
     }
 
-    // Fetch the "Drop-off" tag
     let dropOffTag = await Tag.findOne({ name: "drop-off" });
 
     const contact = await Contact.findOne({ email });
@@ -1492,7 +1467,6 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
     if (contact) {
       contact.statusTag = "Success";
 
-      // Ensure tags array exists
       if (!Array.isArray(contact.tags)) {
         contact.tags = [];
       }
@@ -1511,17 +1485,14 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
     }
     const invoicePath = await generateInvoice(payment, courseDetails);
 
-if (!fs.existsSync(invoicePath)) {
-  console.error("❌ Invoice file is missing:", invoicePath);
-} else {
-  console.log("✅ Invoice file exists, proceeding with email...");
-}
+    await sendPaymentSuccessEmail(
+      user,
+      email,
+      courseDetails,
+      razorpay_order_id,
+      invoicePath
+    );
 
-// Now send the email
-await sendPaymentSuccessEmail(user, email, courseDetails, razorpay_order_id, invoicePath);
-
-
-    // ✅ Track with Facebook Pixel
     const fbPixelData = {
       event_name: "Purchase",
       event_time: Math.floor(Date.now() / 1000),
@@ -1541,18 +1512,14 @@ await sendPaymentSuccessEmail(user, email, courseDetails, razorpay_order_id, inv
       action_source: "website",
     };
 
-    console.log("📢 Facebook Pixel Data:", fbPixelData);
-
     const fbResponse = await axios.post(
       `https://graph.facebook.com/v18.0/${process.env.FB_PIXEL_ID}/events?access_token=${process.env.FB_ACCESS_TOKEN}`,
       { data: [fbPixelData] }
     );
 
-    console.log("✅ Facebook Pixel Response:", fbResponse.data);
-
-    return res.json({
+    return res.status(200).json({
       message: "Payment verified, course details sent, and event tracked",
-      status: "Success",
+      status: "success",
       payment,
       user,
       resetLink,
@@ -1624,16 +1591,18 @@ const GetCheckoutPage = async (req, res) => {
     const { courseId } = req.params;
 
     const checkoutpage = await CheckoutPage.findOne({ courseId })
-      .populate('courseId') // This populates the course details
+      .populate("courseId") // This populates the course details
       .exec();
 
     if (!checkoutpage) {
-      return res.status(404).json({ message: "No checkout page found for this course" });
+      return res
+        .status(404)
+        .json({ message: "No checkout page found for this course" });
     }
 
-    res.status(200).json({ 
-      message: "Checkout page retrieved successfully", 
-      data: checkoutpage 
+    res.status(200).json({
+      message: "Checkout page retrieved successfully",
+      data: checkoutpage,
     });
   } catch (error) {
     console.error("Error fetching checkout page:", error);
@@ -1641,7 +1610,7 @@ const GetCheckoutPage = async (req, res) => {
   }
 };
 module.exports = {
-  getCourseDetails  ,
+  getCourseDetails,
   createCashfreeOrder,
   verifyCashfreeOrder,
   SaleCreateCashfreeOrder,
@@ -1654,5 +1623,5 @@ module.exports = {
   verifyRazorpayPayment,
   SaleCreateRazorpayOrder,
   SaleVerifyRazorpayPayment,
-  GetCheckoutPage
+  GetCheckoutPage,
 };

@@ -3,7 +3,17 @@ const mongoose = require("mongoose");
 const lectureSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: { type: String },
-  videoUrl: { type: String, required: true },
+  // For uploaded videos
+  videoUrl: { type: String },
+  // For embedded videos
+  embedCode: { type: String },
+  // To track content type
+  contentType: { 
+    type: String, 
+    required: true,
+    enum: ['file', 'embed'], 
+    default: 'file' 
+  },
   resources: [{ type: String }],
   duration: { type: Number },
   createdAt: { type: Date, default: Date.now },

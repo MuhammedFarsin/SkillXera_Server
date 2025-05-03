@@ -316,12 +316,12 @@ const getLectures = async (req, res) => {
 const addLecture = async (req, res) => {
   try {
     const { courseId, moduleId } = req.params;
-    const { title, description, duration } = req.body;
-    if (!req.files.video) {
-      return res.status(400).json({ message: "Video file is required" });
-    }
+    const { title, description, duration, contentType, embedCode } = req.body;
 
-    const videoPath = `/videos/${req.files.video[0].filename}`;
+    // Validate required fields
+    if (!title || !duration) {
+      return res.status(400).json({ message: "Title and duration are required" });
+    }
 
     const course = await Course.findById(courseId);
     if (!course) return res.status(404).json({ message: "Course not found" });
@@ -329,14 +329,30 @@ const addLecture = async (req, res) => {
     const module = course.modules.id(moduleId);
     if (!module) return res.status(404).json({ message: "Module not found" });
 
+    // Create new lecture object
     const newLecture = {
       _id: new mongoose.Types.ObjectId(),
       title,
       description,
-      videoUrl: videoPath,
       duration: Number(duration),
+      contentType,
       createdAt: new Date(),
     };
+
+    // Handle file upload or embed code
+    if (contentType === 'file') {
+      if (!req.files?.video) {
+        return res.status(400).json({ message: "Video file is required for file upload" });
+      }
+      newLecture.videoUrl = `/videos/${req.files.video[0].filename}`;
+    } else if (contentType === 'embed') {
+      if (!embedCode) {
+        return res.status(400).json({ message: "Embed code is required for embedded content" });
+      }
+      newLecture.embedCode = embedCode;
+    } else {
+      return res.status(400).json({ message: "Invalid content type" });
+    }
 
     module.lectures.push(newLecture);
     await course.save();
