@@ -3,10 +3,10 @@ const Purchase = require("../Model/PurchaseModal");
 const User = require("../Model/UserModel");
 const SalesPage = require("../Model/SalesModal");
 const CheckoutPage = require("../Model/CheckoutModal");
+const DigitalProduct = require("../Model/DigitalProductModal");
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
-const { cloudinary } = require("../Config/CloudinaryConfig");
 
 const getCourse = async (req, res) => {
   try {
@@ -320,7 +320,9 @@ const addLecture = async (req, res) => {
 
     // Validate required fields
     if (!title || !duration) {
-      return res.status(400).json({ message: "Title and duration are required" });
+      return res
+        .status(400)
+        .json({ message: "Title and duration are required" });
     }
 
     const course = await Course.findById(courseId);
@@ -340,14 +342,18 @@ const addLecture = async (req, res) => {
     };
 
     // Handle file upload or embed code
-    if (contentType === 'file') {
+    if (contentType === "file") {
       if (!req.files?.video) {
-        return res.status(400).json({ message: "Video file is required for file upload" });
+        return res
+          .status(400)
+          .json({ message: "Video file is required for file upload" });
       }
       newLecture.videoUrl = `/videos/${req.files.video[0].filename}`;
-    } else if (contentType === 'embed') {
+    } else if (contentType === "embed") {
       if (!embedCode) {
-        return res.status(400).json({ message: "Embed code is required for embedded content" });
+        return res
+          .status(400)
+          .json({ message: "Embed code is required for embedded content" });
       }
       newLecture.embedCode = embedCode;
     } else {
@@ -653,7 +659,7 @@ const getBuyCourseDetails = async (req, res) => {
 const createSalesPage = async (req, res) => {
   try {
     const { courseId } = req.params;
-    
+
     // Remove AfterButtonPoints from destructuring since we'll parse it separately
     const {
       lines,
@@ -673,12 +679,14 @@ const createSalesPage = async (req, res) => {
       SecondCheckBoxConcluding,
       lastPartHeading,
       lastPartContent,
-      faq
+      faq,
     } = req.body;
 
     // Validate required fields
     if (!Array.isArray(lines) || lines.length === 0) {
-      return res.status(400).json({ message: "At least one line is required in section 1." });
+      return res
+        .status(400)
+        .json({ message: "At least one line is required in section 1." });
     }
 
     if (!req.files || !req.files["mainImage"]) {
@@ -691,26 +699,28 @@ const createSalesPage = async (req, res) => {
     let bonusImages = [];
     if (req.files["bonusImages"]) {
       const bonusImageFiles = req.files["bonusImages"];
-      
+
       // Parse bonus titles and prices from request body
       let bonusTitles = [];
       let bonusPrices = [];
-      
+
       if (req.body.bonusTitles) {
         try {
-          bonusTitles = typeof req.body.bonusTitles === 'string' 
-            ? JSON.parse(req.body.bonusTitles) 
-            : req.body.bonusTitles;
+          bonusTitles =
+            typeof req.body.bonusTitles === "string"
+              ? JSON.parse(req.body.bonusTitles)
+              : req.body.bonusTitles;
         } catch (e) {
           bonusTitles = [];
         }
       }
-      
+
       if (req.body.bonusPrices) {
         try {
-          bonusPrices = typeof req.body.bonusPrices === 'string'
-            ? JSON.parse(req.body.bonusPrices)
-            : req.body.bonusPrices;
+          bonusPrices =
+            typeof req.body.bonusPrices === "string"
+              ? JSON.parse(req.body.bonusPrices)
+              : req.body.bonusPrices;
         } catch (e) {
           bonusPrices = [];
         }
@@ -720,17 +730,17 @@ const createSalesPage = async (req, res) => {
       bonusImages = bonusImageFiles.map((file, index) => ({
         image: file.filename,
         title: bonusTitles[index] || "",
-        price: bonusPrices[index] || ""
+        price: bonusPrices[index] || "",
       }));
     }
 
     // Enhanced parseField function
     const parseField = (field, defaultValue = null) => {
       if (field === undefined || field === null) return defaultValue;
-      if (typeof field === 'string' && field.trim() === '') return defaultValue;
-      
+      if (typeof field === "string" && field.trim() === "") return defaultValue;
+
       try {
-        if (typeof field === 'string') {
+        if (typeof field === "string") {
           return JSON.parse(field);
         }
         return field;
@@ -740,7 +750,9 @@ const createSalesPage = async (req, res) => {
     };
 
     // Parse AfterButtonPoints as a single unit
-    const AfterButtonPoints = parseField(req.body.AfterButtonPoints, { description: [] });
+    const AfterButtonPoints = parseField(req.body.AfterButtonPoints, {
+      description: [],
+    });
 
     // Create the sales page document with all fields including bonus prices
     const newSalesPage = new SalesPage({
@@ -751,11 +763,11 @@ const createSalesPage = async (req, res) => {
       buttonContent,
       embedCode,
       mainImage,
-      
+
       // Section 2
       checkBoxHeading,
       FirstCheckBox: parseField(FirstCheckBox),
-      
+
       // Section 3
       offerContent,
       offerLimitingContent,
@@ -763,16 +775,16 @@ const createSalesPage = async (req, res) => {
       SecondCheckBox: parseField(SecondCheckBox),
       SecondCheckBoxConcluding,
       Topic,
-      
+
       // Section 4
       ThirdSectionSubHeading,
       ThirdSectionDescription: parseField(ThirdSectionDescription),
-      
+
       // Section 5
       AfterButtonPoints,
       bonusImages, // Now includes price for each bonus
       section5Lines: parseField(section5Lines),
-      
+
       // Section 6
       lastPartHeading,
       lastPartContent,
@@ -788,16 +800,15 @@ const createSalesPage = async (req, res) => {
       data: {
         salesPageId: newSalesPage._id,
         courseId: newSalesPage.courseId,
-        bonusImages: newSalesPage.bonusImages // Include bonus images in response
-      }
+        bonusImages: newSalesPage.bonusImages, // Include bonus images in response
+      },
     });
-
   } catch (error) {
     console.error("Error creating sales page:", error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message 
+      error: error.message,
     });
   }
 };
@@ -829,7 +840,7 @@ const updateSalesPage = async (req, res) => {
     // Enhanced parsing function
     const parseField = (field, defaultValue = []) => {
       try {
-        if (typeof field === 'string') {
+        if (typeof field === "string") {
           const parsed = JSON.parse(field);
           return Array.isArray(parsed) ? parsed : defaultValue;
         }
@@ -843,7 +854,9 @@ const updateSalesPage = async (req, res) => {
     // Parse lines first to ensure validation passes
     const lines = parseField(req.body.lines);
     if (!lines || lines.length === 0) {
-      return res.status(400).json({ message: "At least one line is required." });
+      return res
+        .status(400)
+        .json({ message: "At least one line is required." });
     }
 
     // Handle main image
@@ -856,51 +869,51 @@ const updateSalesPage = async (req, res) => {
     const currentBonusImages = existing.bonusImages || [];
 
     // Get the submitted titles and prices
-    const existingTitles = req.body.existingBonusTitles 
-      ? (Array.isArray(req.body.existingBonusTitles) 
-          ? req.body.existingBonusTitles 
-          : JSON.parse(req.body.existingBonusTitles || '[]'))
+    const existingTitles = req.body.existingBonusTitles
+      ? Array.isArray(req.body.existingBonusTitles)
+        ? req.body.existingBonusTitles
+        : JSON.parse(req.body.existingBonusTitles || "[]")
       : [];
-    
-    const existingPrices = req.body.existingBonusPrices 
-      ? (Array.isArray(req.body.existingBonusPrices) 
-          ? req.body.existingBonusPrices 
-          : JSON.parse(req.body.existingBonusPrices || '[]'))
+
+    const existingPrices = req.body.existingBonusPrices
+      ? Array.isArray(req.body.existingBonusPrices)
+        ? req.body.existingBonusPrices
+        : JSON.parse(req.body.existingBonusPrices || "[]")
       : [];
 
     // Rebuild the bonusImages array
     const updatedBonusImages = [];
-    
+
     // Match existing images with their updated titles/prices
     existingTitles.forEach((title, index) => {
       if (currentBonusImages[index]) {
         updatedBonusImages.push({
           image: currentBonusImages[index].image, // Keep original filename
           title: title || "",
-          price: existingPrices[index] || ""
+          price: existingPrices[index] || "",
         });
       }
     });
 
     // Handle new bonus images
     if (req.files && req.files["bonusImages"]) {
-      const newTitles = req.body.newBonusTitles 
-        ? (Array.isArray(req.body.newBonusTitles) 
-            ? req.body.newBonusTitles 
-            : JSON.parse(req.body.newBonusTitles || '[]'))
+      const newTitles = req.body.newBonusTitles
+        ? Array.isArray(req.body.newBonusTitles)
+          ? req.body.newBonusTitles
+          : JSON.parse(req.body.newBonusTitles || "[]")
         : [];
-      
-      const newPrices = req.body.newBonusPrices 
-        ? (Array.isArray(req.body.newBonusPrices) 
-            ? req.body.newBonusPrices 
-            : JSON.parse(req.body.newBonusPrices || '[]'))
+
+      const newPrices = req.body.newBonusPrices
+        ? Array.isArray(req.body.newBonusPrices)
+          ? req.body.newBonusPrices
+          : JSON.parse(req.body.newBonusPrices || "[]")
         : [];
 
       req.files["bonusImages"].forEach((file, index) => {
         updatedBonusImages.push({
           image: file.filename,
           title: newTitles[index] || "",
-          price: newPrices[index] || ""
+          price: newPrices[index] || "",
         });
       });
     }
@@ -909,25 +922,23 @@ const updateSalesPage = async (req, res) => {
 
     const parseAfterButtonPoints = (field) => {
       try {
-        if (typeof field === 'string') {
+        if (typeof field === "string") {
           const parsed = JSON.parse(field);
           return {
-            description: Array.isArray(parsed?.description) 
-              ? parsed.description 
-              : []
+            description: Array.isArray(parsed?.description)
+              ? parsed.description
+              : [],
           };
         }
         return {
-          description: Array.isArray(field?.description) 
-            ? field.description 
-            : []
+          description: Array.isArray(field?.description)
+            ? field.description
+            : [],
         };
       } catch (e) {
         return { description: [] };
       }
     };
-
-  
 
     // Update fields with proper parsing
     existing.lines = lines;
@@ -941,8 +952,12 @@ const updateSalesPage = async (req, res) => {
     existing.SecondCheckBox = parseField(req.body.SecondCheckBox);
     existing.Topic = req.body.Topic || "";
     existing.ThirdSectionSubHeading = req.body.ThirdSectionSubHeading || "";
-    existing.ThirdSectionDescription = parseField(req.body.ThirdSectionDescription);
-    existing.AfterButtonPoints = parseAfterButtonPoints(req.body.AfterButtonPoints);
+    existing.ThirdSectionDescription = parseField(
+      req.body.ThirdSectionDescription
+    );
+    existing.AfterButtonPoints = parseAfterButtonPoints(
+      req.body.AfterButtonPoints
+    );
     existing.offerContent = req.body.offerContent || "";
     existing.offerLimitingContent = req.body.offerLimitingContent || "";
     existing.SecondCheckBoxConcluding = req.body.SecondCheckBoxConcluding || "";
@@ -952,7 +967,6 @@ const updateSalesPage = async (req, res) => {
     existing.mainImage = mainImage;
     existing.bonusImages = updatedBonusImages;
 
-
     await existing.save();
 
     return res.status(200).json({
@@ -960,16 +974,15 @@ const updateSalesPage = async (req, res) => {
       message: "Sales page updated successfully.",
       data: {
         salesPageId: existing._id,
-        courseId: existing.courseId
-      }
+        courseId: existing.courseId,
+      },
     });
-
   } catch (error) {
     console.error("Error updating sales page:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -1015,7 +1028,257 @@ const createCheckout = async (req, res) => {
   }
 };
 
+const getDigitalProduct = async (req, res) => {
+  try {
+    const fetchedDigitalProduct = await DigitalProduct.find();
 
+    if (!fetchedDigitalProduct) {
+      res.status(400).json({ message: "Not have any digital product..." });
+    }
+
+    res.status(200).json({
+      products: fetchedDigitalProduct,
+      message: "Successfully fetched...",
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Internal Server Error...!" });
+  }
+};
+
+const addDigitalProduct = async (req, res) => {
+  try {
+    // Validate required fields
+    if (!req.body.name || !req.body.regularPrice || !req.body.category) {
+      return res.status(400).json({
+        message: "Name, regular price, and category are required",
+      });
+    }
+
+    // Validate price values
+    if (
+      isNaN(req.body.regularPrice) ||
+      parseFloat(req.body.regularPrice) <= 0
+    ) {
+      return res.status(400).json({
+        message: "Regular price must be a positive number",
+      });
+    }
+
+    if (
+      req.body.salePrice &&
+      (isNaN(req.body.salePrice) ||
+        parseFloat(req.body.salePrice) >= parseFloat(req.body.regularPrice))
+    ) {
+      return res.status(400).json({
+        message: "Sale price must be less than regular price",
+      });
+    }
+
+    // Validate content type
+    if (!["file", "link"].includes(req.body.contentType)) {
+      return res.status(400).json({
+        message: "Content type must be either 'file' or 'link'",
+      });
+    }
+
+    // Validate based on content type
+    if (req.body.contentType === "file" && !req.file && !req.body.fileUrl) {
+      return res.status(400).json({
+        message: "File is required for file products",
+      });
+    }
+
+    if (req.body.contentType === "link" && !req.body.externalUrl) {
+      return res.status(400).json({
+        message: "External URL is required for link products",
+      });
+    }
+
+    // Handle file upload if present
+    let fileUrl = req.body.fileUrl;
+    if (req.body.contentType === "file" && req.file) {
+      const uploadResult = await uploadFileToCloud(req.file);
+      fileUrl = uploadResult.secure_url;
+    }
+
+    // Create new product
+    const newProduct = new DigitalProduct({
+      name: req.body.name,
+      description: req.body.description,
+      regularPrice: parseFloat(req.body.regularPrice),
+      salePrice: req.body.salePrice ? parseFloat(req.body.salePrice) : null,
+      category: req.body.category,
+      status: req.body.status || "active",
+      [req.body.contentType === "file" ? "fileUrl" : "externalUrl"]:
+        req.body.contentType === "file" ? fileUrl : req.body.externalUrl,
+    });
+
+    // Save to database
+    const savedProduct = await newProduct.save();
+
+    // Return success response
+    return res.status(201).json({
+      message: "Digital product added successfully",
+      product: savedProduct,
+    });
+  } catch (error) {
+    console.error("Error adding digital product:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+const deleteDigitalProduct = async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    if (!productId) {
+      return res.status(400).json({ message: "Product ID is required" }); // 400 Bad Request
+    }
+
+    const deletedProduct = await DigitalProduct.findByIdAndDelete(productId);
+
+    if (!deletedProduct) {
+      return res.status(404).json({ message: "Product not found" }); // 404 Not Found
+    }
+
+    return res.status(200).json({ message: "Product deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting product:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+const changeProductStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    // Validate input
+    if (!id) {
+      return res.status(400).json({ message: "Product ID is required" });
+    }
+
+    if (!status || !["active", "inactive"].includes(status)) {
+      return res
+        .status(400)
+        .json({ message: "Status must be either 'active' or 'inactive'" });
+    }
+
+    // Update the product status
+    const updatedProduct = await DigitalProduct.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true } // Return the updated document
+    );
+
+    if (!updatedProduct) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    return res.status(200).json({
+      message: "Product status updated successfully",
+      product: updatedProduct,
+    });
+  } catch (error) {
+    console.error("Error changing product status:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+const getEditProductDetails = async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    if (!productId) {
+      return res.status(400).json({ message: "Product ID is required" });
+    }
+
+    const product = await DigitalProduct.findById(productId);
+
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    // Format the response to match what the frontend expects
+    const responseData = {
+      name: product.name,
+      description: product.description,
+      regularPrice: product.regularPrice,
+      salePrice: product.salePrice || "",
+      category: product.category,
+      fileUrl: product.fileUrl || "",
+      externalUrl: product.externalUrl || "",
+      contentType: product.fileUrl ? "file" : "link",
+      status: product.status,
+    };
+
+    return res.status(200).json(responseData);
+
+  } catch (error) {
+    console.error("Error fetching product details:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+const UpdateProductDetails = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const formData = req.body;
+    const file = req.file;
+
+    if (!productId) {
+      return res.status(400).json({ message: "Product ID is required" });
+    }
+
+    // Check if product exists
+    const existingProduct = await DigitalProduct.findById(productId);
+    if (!existingProduct) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    // Prepare update data
+    const updateData = {
+      name: formData.name,
+      description: formData.description,
+      regularPrice: parseFloat(formData.regularPrice),
+      salePrice: formData.salePrice ? parseFloat(formData.salePrice) : null,
+      category: formData.category,
+      status: formData.status,
+      contentType: formData.contentType
+    };
+
+    // Handle file/link updates
+    if (formData.contentType === 'file') {
+      if (file) {
+        const uploadResult = await uploadFileToCloud(file);
+        updateData.fileUrl = uploadResult.secure_url;
+        updateData.externalUrl = undefined;
+      } else if (!existingProduct.fileUrl) {
+        return res.status(400).json({ message: "File is required" });
+      }
+    } else {
+      if (!formData.externalUrl) {
+        return res.status(400).json({ message: "External URL is required" });
+      }
+      updateData.externalUrl = formData.externalUrl;
+      updateData.fileUrl = undefined;
+    }
+
+    const updatedProduct = await DigitalProduct.findByIdAndUpdate(
+      productId,
+      updateData,
+      { new: true }
+    );
+
+    return res.status(200).json({
+      message: "Product updated successfully",
+      product: updatedProduct
+    });
+
+  } catch (error) {
+    console.error("Error updating product:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
 
 module.exports = {
   getCourse,
@@ -1042,4 +1305,10 @@ module.exports = {
   GetSalesPage,
   updateSalesPage,
   createCheckout,
+  getDigitalProduct,
+  addDigitalProduct,
+  deleteDigitalProduct,
+  changeProductStatus,
+  getEditProductDetails,
+  UpdateProductDetails
 };

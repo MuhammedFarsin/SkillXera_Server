@@ -22,7 +22,13 @@ const {
   createSalesPage,
   GetSalesPage,
   updateSalesPage,
-  createCheckout
+  createCheckout,
+  getDigitalProduct,
+  addDigitalProduct,
+  deleteDigitalProduct,
+  changeProductStatus,
+  getEditProductDetails,
+  UpdateProductDetails
 } = require("../Controller/CourseController");
 
 const {
@@ -107,6 +113,16 @@ adminRoute.get(
   authenticateAccessToken,isAdmin,
   getModuleLecture
 );
+
+//digital-product
+adminRoute.get("/assets/file/get-digital-products", authenticateAccessToken, getDigitalProduct)
+adminRoute.post("/assets/file/add-digital-product", authenticateAccessToken, uploadMiddleware, addDigitalProduct)
+adminRoute.delete("/assets/file/delete-digital-products/:productId", authenticateAccessToken, deleteDigitalProduct)
+adminRoute.patch("/assets/file/digital-products/:id/status", authenticateAccessToken, changeProductStatus)
+adminRoute.get("/assets/file/get-edit-digital-product/:productId", authenticateAccessToken, getEditProductDetails)
+adminRoute.put("/assets/file/update-digital-product/:productId",authenticateAccessToken,uploadMiddleware, UpdateProductDetails)
+
+
 
 //Contacts...
 adminRoute.get("/crm/contact/get-contacts",authenticateAccessToken,isAdmin, getContacts);
