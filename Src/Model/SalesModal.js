@@ -2,122 +2,91 @@ const mongoose = require("mongoose");
 
 const salesPageSchema = new mongoose.Schema(
   {
-    courseId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Course",
-      required: true,
+    linkedTo: {
+      kind: {
+        type: String,
+        enum: ["Course", "DigitalProduct"],
+        required: true
+      },
+      item: {
+        type: mongoose.Schema.Types.ObjectId,
+        required: true,
+        refPath: "linkedTo.kind"
+      }
     },
-
     lines: {
       type: [String],
       required: true,
-      validate: [(val) => val.length > 0, "At least one line is required"],
+      validate: [(val) => val.length > 0, "At least one line is required"]
     },
-
     section5Lines: {
       type: [String],
-      default: [],
+      default: []
     },
-
     mainImage: {
       type: String,
-      required: true,
+      required: true
     },
-
     bonusImages: [
       {
         image: { type: String, required: true },
         title: { type: String, required: true },
-        price: { type: String, required: true },
-      },
+        price: { type: String, required: true }
+      }
     ],
-
-    embedCode: {
-      type: String,
-    },
-
+    embedCode: String,
     smallBoxContent: {
       type: String,
-      required: true,
+      required: true
     },
     buttonContent: {
       type: String,
-      required: true,
+      required: true
     },
     checkBoxHeading: {
       type: String,
-      required: true,
+      required: true
     },
-
     FirstCheckBox: [
       {
-        description: { type: String, required: true },
-      },
+        description: { type: String, required: true }
+      }
     ],
-
     secondCheckBoxHeading: {
       type: String,
-      required: true,
+      required: true
     },
-
     SecondCheckBox: [
       {
-        description: { type: String, required: true },
-      },
+        description: { type: String, required: true }
+      }
     ],
-
-    SecondCheckBoxConcluding: {
-      type: String,
-    },
-
+    SecondCheckBoxConcluding: String,
     Topic: {
       type: String,
-      required: true,
+      required: true
     },
-
     ThirdSectionSubHeading: {
       type: String,
-      required: true,
+      required: true
     },
-
-    ThirdSectionDescription: {
-      type: [String],
-      default: [],
-    },
-
+    ThirdSectionDescription: [String],
     AfterButtonPoints: {
-      description: {
-        type: [String],
-        default: [],
-      },
+      description: [String]
     },
-
-    offerContent: {
-      type: String,
-    },
-
-    offerLimitingContent: {
-      type: String,
-    },
-
-    lastPartHeading: {
-      type: String,
-    },
-
-    lastPartContent: {
-      type: String,
-    },
-
+    offerContent: String,
+    offerLimitingContent: String,
+    lastPartHeading: String,
+    lastPartContent: String,
     faq: [
       {
         question: { type: String, required: true },
-        answer: { type: String, required: true },
-      },
-    ],
+        answer: { type: String, required: true }
+      }
+    ]
   },
   { timestamps: true }
 );
 
 const SalesPage = mongoose.model("SalesPage", salesPageSchema);
-
 module.exports = SalesPage;

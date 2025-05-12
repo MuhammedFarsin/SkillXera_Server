@@ -109,13 +109,23 @@ const dashboard = async (req, res) => {
   }
 };
 
-const getCourseDetails = async (req, res) => {
+const getSalesDetails = async (req, res) => {
   try {
-    const { courseId } = req.params;
+    const { type, id } = req.params;
 
-    const salesPage = await SalesPage.findOne({ courseId }).populate(
-      "courseId"
-    );
+    // Validate type parameter
+    if (!['course', 'digital-product'].includes(type)) {
+      return res.status(400).json({ message: "Invalid type parameter" });
+    }
+
+    // Convert URL type to schema enum value
+    const kind = type === 'course' ? 'Course' : 'DigitalProduct';
+
+    const salesPage = await SalesPage.findOne({ 
+      'linkedTo.kind': kind,
+      'linkedTo.item': id
+    }).populate('linkedTo.item');
+
     if (!salesPage) {
       return res.status(404).json({ message: "Sales page not found" });
     }
@@ -464,9 +474,11 @@ const verifyCashfreeOrder = async (req, res) => {
 };
 const SaleCreateCashfreeOrder = async (req, res) => {
   try {
-    const { amount, currency, courseId, customer_details } = req.body;
+    const { amount, currency, productId, productType, customer_details } = req.body;
 
-    if (!amount || !currency || !courseId || !customer_details) {
+    // Validate request parameters
+    if (!amount || !currency || !productId || !customer_details || 
+        !["Course", "DigitalProduct"].includes(productType)) {
       return res.status(400).json({ error: "Invalid request parameters" });
     }
 
@@ -476,25 +488,23 @@ const SaleCreateCashfreeOrder = async (req, res) => {
       customer_phone: phone,
     } = customer_details;
 
-    // Check if the lead already exists
-    let lead = await Lead.findOne({ email, courseId });
+    // Check if lead exists (now supports both product types)
+    let lead = await Lead.findOne({ email, productId, productType });
 
     if (!lead) {
-      // Create a new lead if not exists
-      lead = await Lead.create({ username, email, phone, courseId });
-
-      // Emit socket event for new lead
+      lead = await Lead.create({ username, email, phone, productId, productType });
       emitNewLead({
         _id: lead._id,
         username,
         email,
         phone,
-        courseId,
+        productId,
+        productType,
         createdAt: lead.createdAt,
       });
     }
 
-    // Rest of your existing code...
+    // Handle contact creation
     let dropOffTag = await Tag.findOne({ name: "drop-off" });
     if (!dropOffTag) {
       dropOffTag = await Tag.create({ name: "drop-off" });
@@ -511,16 +521,18 @@ const SaleCreateCashfreeOrder = async (req, res) => {
       });
     }
 
-    // Generate a unique order ID
+    // Generate order ID
     const generatedOrderId = `ORDER_${Date.now()}`;
 
+    // Call Cashfree API
     const response = await axios.post(
       `${CASHFREE_BASE_URL}`,
       {
         order_amount: amount,
         order_currency: currency,
         order_id: generatedOrderId,
-        courseId,
+        productId,
+        productType, // Include product type in Cashfree payload
         customer_details: {
           customer_id: `CF_${Date.now()}`,
           customer_name: username,
@@ -528,7 +540,7 @@ const SaleCreateCashfreeOrder = async (req, res) => {
           customer_phone: phone,
         },
         order_meta: {
-          return_url: `${process.env.FRONTEND_URL}/sale/payment-success?order_id=${generatedOrderId}&courseId=${courseId}&email=${email}&gateway=cashfree`,
+          return_url: `${process.env.FRONTEND_URL}/sale/payment-success?order_id=${generatedOrderId}&productId=${productId}&productType=${productType}&email=${email}&gateway=cashfree`,
         },
       },
       {
@@ -544,7 +556,8 @@ const SaleCreateCashfreeOrder = async (req, res) => {
     res.json({
       payment_session_id: response.data.payment_session_id,
       cf_order_id: response.data.order_id,
-      courseId: courseId,
+      productId,
+      productType,
     });
   } catch (error) {
     console.error("Cashfree API Error:", error.response?.data || error);
@@ -557,21 +570,23 @@ const SaleCreateCashfreeOrder = async (req, res) => {
 
 const SaleVerifyCashfreeOrder = async (req, res) => {
   try {
-    const { order_id, courseId, email } = req.body;
-    if (!order_id) {
-      return res.status(400).json({ message: "Order ID is required" });
+    const { order_id, productId, productType, email } = req.body;
+    
+    if (!order_id || !["Course", "DigitalProduct"].includes(productType)) {
+      return res.status(400).json({ message: "Invalid request parameters" });
     }
 
     const existingPayment = await Payment.findOne({
       email,
-      courseId,
+      productId,
+      productType,
       status: "Success",
     });
 
     if (existingPayment) {
       return res.status(201).json({
         status: "already_paid",
-        message: "You have already purchased this course.",
+        message: "You have already purchased this product.",
         payment: existingPayment,
       });
     }
@@ -594,18 +609,14 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
     const { order_amount, customer_details, created_at } = orderData;
     const { customer_name, customer_email, customer_phone } = customer_details;
 
-    let finalCourseId = courseId;
+     let finalProductId = productId;
+    let finalProductType = productType;
 
-    if (!finalCourseId) {
+    if (!finalProductId) {
       const existingPayment = await Payment.findOne({ email: customer_email });
       if (existingPayment) {
-        finalCourseId = existingPayment.courseId;
-      }
-      if (!finalCourseId) {
-        const matchedCourse = await Course.findOne({ price: order_amount });
-        if (matchedCourse) {
-          finalCourseId = matchedCourse._id.toString();
-        }
+        finalProductId = existingPayment.productId;
+        finalProductType = existingPayment.productType;
       }
     }
 
@@ -1610,7 +1621,7 @@ const GetCheckoutPage = async (req, res) => {
   }
 };
 module.exports = {
-  getCourseDetails,
+  getSalesDetails,
   createCashfreeOrder,
   verifyCashfreeOrder,
   SaleCreateCashfreeOrder,

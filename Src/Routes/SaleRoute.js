@@ -2,7 +2,7 @@ const express = require("express");
 const saleRoute = express.Router();
 
 const {
-  getCourseDetails,
+  getSalesDetails,
   SaleCreateCashfreeOrder,
   SaleCreateRazorpayOrder,
   SaleVerifyCashfreeOrder,
@@ -10,7 +10,7 @@ const {
   GetCheckoutPage,
 } = require("../Controller/SaleController");
 
-saleRoute.get("/get-sales-page/course/:courseId", getCourseDetails);
+saleRoute.get("/get-sales-page/:type/:id", getSalesDetails);
 saleRoute.get("/buy-course/course/:courseId", GetCheckoutPage);
 saleRoute.post("/salespage/create-cashfree-order", SaleCreateCashfreeOrder);
 saleRoute.post("/salespage/verify-cashfree-payment", SaleVerifyCashfreeOrder);

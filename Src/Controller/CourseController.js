@@ -658,140 +658,92 @@ const getBuyCourseDetails = async (req, res) => {
 
 const createSalesPage = async (req, res) => {
   try {
-    const { courseId } = req.params;
-
-    // Remove AfterButtonPoints from destructuring since we'll parse it separately
-    const {
-      lines,
-      section5Lines,
-      embedCode,
-      smallBoxContent,
-      buttonContent,
-      checkBoxHeading,
-      FirstCheckBox,
-      secondCheckBoxHeading,
-      SecondCheckBox,
-      Topic,
-      ThirdSectionSubHeading,
-      ThirdSectionDescription,
-      offerContent,
-      offerLimitingContent,
-      SecondCheckBoxConcluding,
-      lastPartHeading,
-      lastPartContent,
-      faq,
-    } = req.body;
+    const { type, id } = req.params; 
 
     // Validate required fields
-    if (!Array.isArray(lines) || lines.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "At least one line is required in section 1." });
+    const requiredFields = [
+      'lines', 'smallBoxContent', 'buttonContent', 'checkBoxHeading',
+      'FirstCheckBox', 'secondCheckBoxHeading', 'SecondCheckBox',
+      'Topic', 'ThirdSectionSubHeading'
+    ];
+    
+    for (const field of requiredFields) {
+      if (!req.body[field]) {
+        return res.status(400).json({ message: `${field} is required` });
+      }
     }
 
-    if (!req.files || !req.files["mainImage"]) {
+    if (!req.files?.mainImage) {
       return res.status(400).json({ message: "Main image is required" });
     }
 
-    const mainImage = req.files["mainImage"][0].filename;
+    // Process main image
+    const mainImage = req.files.mainImage[0].filename;
 
-    // Process bonus images with titles and prices
-    let bonusImages = [];
-    if (req.files["bonusImages"]) {
-      const bonusImageFiles = req.files["bonusImages"];
+    // Process bonus images
+    const bonusImages = [];
+    if (req.files.bonusImages) {
+      const bonusTitles = Array.isArray(req.body.bonusTitles) 
+        ? req.body.bonusTitles 
+        : JSON.parse(req.body.bonusTitles || '[]');
+      
+      const bonusPrices = Array.isArray(req.body.bonusPrices)
+        ? req.body.bonusPrices
+        : JSON.parse(req.body.bonusPrices || '[]');
 
-      // Parse bonus titles and prices from request body
-      let bonusTitles = [];
-      let bonusPrices = [];
-
-      if (req.body.bonusTitles) {
-        try {
-          bonusTitles =
-            typeof req.body.bonusTitles === "string"
-              ? JSON.parse(req.body.bonusTitles)
-              : req.body.bonusTitles;
-        } catch (e) {
-          bonusTitles = [];
-        }
-      }
-
-      if (req.body.bonusPrices) {
-        try {
-          bonusPrices =
-            typeof req.body.bonusPrices === "string"
-              ? JSON.parse(req.body.bonusPrices)
-              : req.body.bonusPrices;
-        } catch (e) {
-          bonusPrices = [];
-        }
-      }
-
-      // Map files with corresponding titles and prices
-      bonusImages = bonusImageFiles.map((file, index) => ({
-        image: file.filename,
-        title: bonusTitles[index] || "",
-        price: bonusPrices[index] || "",
-      }));
+      req.files.bonusImages.forEach((file, index) => {
+        bonusImages.push({
+          image: file.filename,
+          title: bonusTitles[index] || `Bonus ${index + 1}`,
+          price: bonusPrices[index] || "0"
+        });
+      });
     }
 
-    // Enhanced parseField function
-    const parseField = (field, defaultValue = null) => {
-      if (field === undefined || field === null) return defaultValue;
-      if (typeof field === "string" && field.trim() === "") return defaultValue;
-
-      try {
-        if (typeof field === "string") {
+    // Helper function to parse fields that might be JSON strings
+    const parseField = (field, defaultValue) => {
+      if (field === undefined) return defaultValue;
+      if (typeof field === 'string') {
+        try {
           return JSON.parse(field);
+        } catch {
+          return field;
         }
-        return field;
-      } catch (e) {
-        return defaultValue;
       }
+      return field;
     };
 
-    // Parse AfterButtonPoints as a single unit
-    const AfterButtonPoints = parseField(req.body.AfterButtonPoints, {
-      description: [],
-    });
-
-    // Create the sales page document with all fields including bonus prices
+    // Create the sales page
     const newSalesPage = new SalesPage({
-      courseId,
-      // Section 1
-      lines: parseField(lines),
-      smallBoxContent,
-      buttonContent,
-      embedCode,
+      linkedTo: {
+        kind: type === 'course' ? 'Course' : 'DigitalProduct',
+        item: id
+      },
+      lines: parseField(req.body.lines, []),
+      section5Lines: parseField(req.body.section5Lines, []),
       mainImage,
-
-      // Section 2
-      checkBoxHeading,
-      FirstCheckBox: parseField(FirstCheckBox),
-
-      // Section 3
-      offerContent,
-      offerLimitingContent,
-      secondCheckBoxHeading,
-      SecondCheckBox: parseField(SecondCheckBox),
-      SecondCheckBoxConcluding,
-      Topic,
-
-      // Section 4
-      ThirdSectionSubHeading,
-      ThirdSectionDescription: parseField(ThirdSectionDescription),
-
-      // Section 5
-      AfterButtonPoints,
-      bonusImages, // Now includes price for each bonus
-      section5Lines: parseField(section5Lines),
-
-      // Section 6
-      lastPartHeading,
-      lastPartContent,
-      faq: parseField(faq),
+      bonusImages,
+      embedCode: req.body.embedCode,
+      smallBoxContent: req.body.smallBoxContent,
+      buttonContent: req.body.buttonContent,
+      checkBoxHeading: req.body.checkBoxHeading,
+      FirstCheckBox: parseField(req.body.FirstCheckBox, []),
+      secondCheckBoxHeading: req.body.secondCheckBoxHeading,
+      SecondCheckBox: parseField(req.body.SecondCheckBox, []),
+      SecondCheckBoxConcluding: req.body.SecondCheckBoxConcluding,
+      Topic: req.body.Topic,
+      ThirdSectionSubHeading: req.body.ThirdSectionSubHeading,
+      ThirdSectionDescription: parseField(req.body.ThirdSectionDescription, []),
+      AfterButtonPoints: {
+        description: parseField(req.body.AfterButtonPoints?.description, [])
+      },
+      offerContent: req.body.offerContent,
+      offerLimitingContent: req.body.offerLimitingContent,
+      lastPartHeading: req.body.lastPartHeading,
+      lastPartContent: req.body.lastPartContent,
+      faq: parseField(req.body.faq, [])
     });
 
-    // Save to database
     await newSalesPage.save();
 
     return res.status(201).json({
@@ -799,24 +751,29 @@ const createSalesPage = async (req, res) => {
       message: "Sales page created successfully",
       data: {
         salesPageId: newSalesPage._id,
-        courseId: newSalesPage.courseId,
-        bonusImages: newSalesPage.bonusImages, // Include bonus images in response
-      },
+        linkedTo: newSalesPage.linkedTo,
+        bonusImages: newSalesPage.bonusImages
+      }
     });
+
   } catch (error) {
     console.error("Error creating sales page:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message,
+      error: error.message
     });
   }
 };
+
 const GetSalesPage = async (req, res) => {
   try {
-    const { courseId } = req.params;
+    const { type, id } = req.params;
 
-    const salesPage = await SalesPage.findOne({ courseId });
+    const salesPage = await SalesPage.findOne({ 
+      'linkedTo.kind': type === 'digital-product' ? 'DigitalProduct' : 'Course',
+      'linkedTo.item': id 
+    });
 
     if (!salesPage) {
       return res.status(404).json({ message: "Sales page not found." });
@@ -827,6 +784,7 @@ const GetSalesPage = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error...!" });
   }
 };
+
 
 const updateSalesPage = async (req, res) => {
   try {
@@ -1280,6 +1238,18 @@ const UpdateProductDetails = async (req, res) => {
   }
 };
 
+const CheckSalesPage = async (req, res) => {
+  try {
+      const salesPage = await SalesPage.findOne({
+        'linkedTo.kind': 'DigitalProduct',
+        'linkedTo.item': req.params.id
+      });
+      res.json({ exists: !!salesPage });
+    } catch (error) {
+      res.status(500).json({ message: "Error checking sales page" });
+    }
+}
+
 module.exports = {
   getCourse,
   createCourse,
@@ -1310,5 +1280,6 @@ module.exports = {
   deleteDigitalProduct,
   changeProductStatus,
   getEditProductDetails,
-  UpdateProductDetails
+  UpdateProductDetails,
+  CheckSalesPage
 };
