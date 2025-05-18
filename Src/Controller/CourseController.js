@@ -4,6 +4,8 @@ const User = require("../Model/UserModel");
 const SalesPage = require("../Model/SalesModal");
 const CheckoutPage = require("../Model/CheckoutModal");
 const DigitalProduct = require("../Model/DigitalProductModal");
+const ThankYouPage = require("../Model/ThankyouModal");
+
 const path = require("path");
 const fs = require("fs");
 const mongoose = require("mongoose");
@@ -658,15 +660,21 @@ const getBuyCourseDetails = async (req, res) => {
 
 const createSalesPage = async (req, res) => {
   try {
-    const { type, id } = req.params; 
+    const { type, id } = req.params;
 
     // Validate required fields
     const requiredFields = [
-      'lines', 'smallBoxContent', 'buttonContent', 'checkBoxHeading',
-      'FirstCheckBox', 'secondCheckBoxHeading', 'SecondCheckBox',
-      'Topic', 'ThirdSectionSubHeading'
+      "lines",
+      "smallBoxContent",
+      "buttonContent",
+      "checkBoxHeading",
+      "FirstCheckBox",
+      "secondCheckBoxHeading",
+      "SecondCheckBox",
+      "Topic",
+      "ThirdSectionSubHeading",
     ];
-    
+
     for (const field of requiredFields) {
       if (!req.body[field]) {
         return res.status(400).json({ message: `${field} is required` });
@@ -683,19 +691,19 @@ const createSalesPage = async (req, res) => {
     // Process bonus images
     const bonusImages = [];
     if (req.files.bonusImages) {
-      const bonusTitles = Array.isArray(req.body.bonusTitles) 
-        ? req.body.bonusTitles 
-        : JSON.parse(req.body.bonusTitles || '[]');
-      
+      const bonusTitles = Array.isArray(req.body.bonusTitles)
+        ? req.body.bonusTitles
+        : JSON.parse(req.body.bonusTitles || "[]");
+
       const bonusPrices = Array.isArray(req.body.bonusPrices)
         ? req.body.bonusPrices
-        : JSON.parse(req.body.bonusPrices || '[]');
+        : JSON.parse(req.body.bonusPrices || "[]");
 
       req.files.bonusImages.forEach((file, index) => {
         bonusImages.push({
           image: file.filename,
           title: bonusTitles[index] || `Bonus ${index + 1}`,
-          price: bonusPrices[index] || "0"
+          price: bonusPrices[index] || "0",
         });
       });
     }
@@ -703,7 +711,7 @@ const createSalesPage = async (req, res) => {
     // Helper function to parse fields that might be JSON strings
     const parseField = (field, defaultValue) => {
       if (field === undefined) return defaultValue;
-      if (typeof field === 'string') {
+      if (typeof field === "string") {
         try {
           return JSON.parse(field);
         } catch {
@@ -716,8 +724,8 @@ const createSalesPage = async (req, res) => {
     // Create the sales page
     const newSalesPage = new SalesPage({
       linkedTo: {
-        kind: type === 'course' ? 'Course' : 'DigitalProduct',
-        item: id
+        kind: type === "course" ? "Course" : "DigitalProduct",
+        item: id,
       },
       lines: parseField(req.body.lines, []),
       section5Lines: parseField(req.body.section5Lines, []),
@@ -735,13 +743,13 @@ const createSalesPage = async (req, res) => {
       ThirdSectionSubHeading: req.body.ThirdSectionSubHeading,
       ThirdSectionDescription: parseField(req.body.ThirdSectionDescription, []),
       AfterButtonPoints: {
-        description: parseField(req.body.AfterButtonPoints?.description, [])
+        description: parseField(req.body.AfterButtonPoints?.description, []),
       },
       offerContent: req.body.offerContent,
       offerLimitingContent: req.body.offerLimitingContent,
       lastPartHeading: req.body.lastPartHeading,
       lastPartContent: req.body.lastPartContent,
-      faq: parseField(req.body.faq, [])
+      faq: parseField(req.body.faq, []),
     });
 
     await newSalesPage.save();
@@ -752,16 +760,15 @@ const createSalesPage = async (req, res) => {
       data: {
         salesPageId: newSalesPage._id,
         linkedTo: newSalesPage.linkedTo,
-        bonusImages: newSalesPage.bonusImages
-      }
+        bonusImages: newSalesPage.bonusImages,
+      },
     });
-
   } catch (error) {
     console.error("Error creating sales page:", error);
     return res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -770,9 +777,9 @@ const GetSalesPage = async (req, res) => {
   try {
     const { type, id } = req.params;
 
-    const salesPage = await SalesPage.findOne({ 
-      'linkedTo.kind': type === 'digital-product' ? 'DigitalProduct' : 'Course',
-      'linkedTo.item': id 
+    const salesPage = await SalesPage.findOne({
+      "linkedTo.kind": type === "digital-product" ? "DigitalProduct" : "Course",
+      "linkedTo.item": id,
     });
 
     if (!salesPage) {
@@ -785,11 +792,14 @@ const GetSalesPage = async (req, res) => {
   }
 };
 
-
 const updateSalesPage = async (req, res) => {
   try {
-    const { courseId } = req.params;
-    const existing = await SalesPage.findOne({ courseId });
+    const { type, id } = req.params;
+
+    const existing = await SalesPage.findOne({
+      "linkedTo.kind": type === "digital-product" ? "DigitalProduct" : "Course",
+      "linkedTo.item": id,
+    });
 
     if (!existing) {
       return res.status(404).json({ message: "Sales page not found." });
@@ -947,42 +957,106 @@ const updateSalesPage = async (req, res) => {
 
 const createCheckout = async (req, res) => {
   try {
-    console.log("this is calling");
     const { topHeading, subHeading } = req.body;
-    const { courseId } = req.params;
-
+    const { type, id } = req.params; // Changed from courseId to id
     const checkoutImageFile = req.files?.checkoutImage?.[0];
 
-    const lines = Array.isArray(req.body.lines)
-      ? req.body.lines
-      : [req.body.lines];
-
-    if (
-      !topHeading ||
-      !subHeading ||
-      !checkoutImageFile ||
-      lines.length === 0
-    ) {
-      return res.status(400).json({ message: "All fields are required." });
+    // Validate required fields
+    if (!topHeading || !subHeading || !checkoutImageFile) {
+      return res.status(400).json({
+        success: false,
+        message: "Top heading, sub heading, and image are required",
+        code: "MISSING_FIELDS",
+      });
     }
 
+    // Process lines (handle both array and single string)
+    const lines = Array.isArray(req.body.lines)
+      ? req.body.lines.filter((line) => line.trim() !== "")
+      : req.body.lines
+      ? [req.body.lines.trim()]
+      : [];
+
+    if (lines.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one content line is required",
+        code: "MISSING_LINES",
+      });
+    }
+
+    // Validate type
+    const validTypes = ["course", "digital-product"];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product type",
+        code: "INVALID_TYPE",
+      });
+    }
+
+    // Verify the referenced product exists
+    const ProductModel = type === "course" ? Course : DigitalProduct;
+    const productExists = await ProductModel.exists({ _id: id });
+    if (!productExists) {
+      return res.status(404).json({
+        success: false,
+        message: `${type} not found`,
+        code: "PRODUCT_NOT_FOUND",
+      });
+    }
+
+    // Create new checkout page
     const newCheckout = new CheckoutPage({
-      courseId,
-      topHeading,
-      subHeading,
+      linkedTo: {
+        kind: type,
+        item: id,
+      },
+      topHeading: topHeading.trim(),
+      subHeading: subHeading.trim(),
       checkoutImage: checkoutImageFile.filename,
       lines,
+      isActive: true,
     });
 
     await newCheckout.save();
 
     return res.status(201).json({
+      success: true,
       message: "Checkout page created successfully",
-      data: newCheckout,
+      data: {
+        checkoutId: newCheckout._id,
+        productId: id,
+        type,
+      },
     });
   } catch (error) {
     console.error("Checkout Creation Error:", error);
-    return res.status(500).json({ message: "Internal Server Error...!" });
+
+    // Handle duplicate key error (unique index violation)
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "Checkout page already exists for this product",
+        code: "DUPLICATE_CHECKOUT",
+      });
+    }
+
+    // Handle validation errors
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: "Validation failed",
+        errors: Object.values(error.errors).map((e) => e.message),
+        code: "VALIDATION_ERROR",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      code: "SERVER_ERROR",
+    });
   }
 };
 
@@ -1089,19 +1163,40 @@ const deleteDigitalProduct = async (req, res) => {
   try {
     const { productId } = req.params;
 
-    if (!productId) {
-      return res.status(400).json({ message: "Product ID is required" }); // 400 Bad Request
+    if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
+      return res.status(400).json({ message: "Valid Product ID is required" });
     }
 
+    // Delete the digital product
     const deletedProduct = await DigitalProduct.findByIdAndDelete(productId);
 
     if (!deletedProduct) {
-      return res.status(404).json({ message: "Product not found" }); // 404 Not Found
+      return res.status(404).json({ message: "Product not found" });
     }
 
-    return res.status(200).json({ message: "Product deleted successfully" });
+    // Delete associated pages
+    await CheckoutPage.deleteOne({
+      "linkedTo.kind": "digital-product",
+      "linkedTo.item": productId,
+    });
+
+    await ThankYouPage.deleteOne({
+      "linkedTo.kind": "digital-product",
+      "linkedTo.item": productId,
+    });
+
+    await SalesPage.deleteOne({
+      $or: [
+        { "linkedTo.kind": "digital-product", "linkedTo.item": productId },
+        { "linkedTo.kind": "DigitalProduct", "linkedTo.item": productId },
+      ],
+    });
+
+    return res.status(200).json({
+      message: "Product and associated pages deleted successfully",
+    });
   } catch (error) {
-    console.error("Error deleting product:", error);
+    console.error("Error deleting product and pages:", error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
@@ -1171,7 +1266,6 @@ const getEditProductDetails = async (req, res) => {
     };
 
     return res.status(200).json(responseData);
-
   } catch (error) {
     console.error("Error fetching product details:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -1201,11 +1295,11 @@ const UpdateProductDetails = async (req, res) => {
       salePrice: formData.salePrice ? parseFloat(formData.salePrice) : null,
       category: formData.category,
       status: formData.status,
-      contentType: formData.contentType
+      contentType: formData.contentType,
     };
 
     // Handle file/link updates
-    if (formData.contentType === 'file') {
+    if (formData.contentType === "file") {
       if (file) {
         const uploadResult = await uploadFileToCloud(file);
         updateData.fileUrl = uploadResult.secure_url;
@@ -1229,9 +1323,8 @@ const UpdateProductDetails = async (req, res) => {
 
     return res.status(200).json({
       message: "Product updated successfully",
-      product: updatedProduct
+      product: updatedProduct,
     });
-
   } catch (error) {
     console.error("Error updating product:", error);
     return res.status(500).json({ message: "Internal Server Error" });
@@ -1240,15 +1333,251 @@ const UpdateProductDetails = async (req, res) => {
 
 const CheckSalesPage = async (req, res) => {
   try {
-      const salesPage = await SalesPage.findOne({
-        'linkedTo.kind': 'DigitalProduct',
-        'linkedTo.item': req.params.id
+    const salesPage = await SalesPage.findOne({
+      "linkedTo.kind": "DigitalProduct",
+      "linkedTo.item": req.params.id,
+    });
+    res.json({ exists: !!salesPage });
+  } catch (error) {
+    res.status(500).json({ message: "Error checking sales page" });
+  }
+};
+
+const CheckCheckoutPage = async (req, res) => {
+  try {
+    const { type, id } = req.params;
+
+    // Find checkout page by linked product ID
+    const checkoutPage = await CheckoutPage.findOne({
+      "linkedTo.kind":
+        type === "digital-product" ? "digital-product" : "course",
+      "linkedTo.item": id,
+    });
+
+    res.json({ exists: !!checkoutPage });
+  } catch (error) {
+    console.error("Error checking checkout page:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error checking checkout page",
+    });
+  }
+};
+const GetEditCheckoutDetails = async (req, res) => {
+  try {
+    const { type, id } = req.params;
+
+    // Validate request parameters
+    if (!type || !id) {
+      return res.status(400).json({
+        success: false,
+        message: "Type and ID are required parameters",
       });
-      res.json({ exists: !!salesPage });
-    } catch (error) {
-      res.status(500).json({ message: "Error checking sales page" });
     }
-}
+
+    // Find the checkout page using the correct schema fields
+    const checkoutPage = await CheckoutPage.findOne({
+      "linkedTo.kind": type,
+      "linkedTo.item": id,
+    }).populate("orderBump thankYouPage");
+
+    if (!checkoutPage) {
+      return res.status(404).json({
+        success: false,
+        message: "Checkout page not found for this product",
+        data: null,
+      });
+    }
+
+    // Return the data in expected format
+    res.status(200).json({
+      success: true,
+      message: "Checkout page details retrieved successfully",
+      data: {
+        topHeading: checkoutPage.topHeading,
+        subHeading: checkoutPage.subHeading,
+        checkoutImage: checkoutPage.checkoutImage,
+        lines: checkoutPage.lines,
+        orderBump: checkoutPage.orderBump,
+        thankYouPage: checkoutPage.thankYouPage,
+      },
+    });
+  } catch (error) {
+    console.error("Error in GetEditCheckoutDetails:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching checkout page details",
+    });
+  }
+};
+
+const CheckThankoutPage = async (req, res) => {
+  try {
+    const { type, id } = req.params;
+
+    const existingPage = await ThankYouPage.findOne({
+      "linkedTo.kind": type,
+      "linkedTo.item": id,
+    });
+
+    res.status(200).json({
+      success: true,
+      exists: !!existingPage,
+      data: existingPage || null,
+    });
+  } catch (error) {
+    console.error("Error in CheckThankoutPage:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error checking thank you page existence",
+    });
+  }
+};
+
+const getEditThankyouPage = async (req, res) => {
+  try {
+    const { type, id } = req.params;
+
+    if (!type || !id) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required parameters: type or id",
+      });
+    }
+
+    const page = await ThankYouPage.findOne({
+      "linkedTo.kind": type,
+      "linkedTo.item": id,
+    });
+
+    if (!page) {
+      return res.status(404).json({
+        success: false,
+        message: "Thank You Page not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: page,
+    });
+  } catch (error) {
+    console.error("Error in getEditThankyouPage:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error while fetching Thank You Page",
+    });
+  }
+};
+
+const createThankyouPage = async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    const { title, embedCode, note, isActive } = req.body;
+
+    const existingPage = await ThankYouPage.findOne({
+      "linkedTo.kind": type,
+      "linkedTo.item": id,
+    });
+
+    if (existingPage) {
+      return res.status(400).json({
+        success: false,
+        message: "Thank you page already exists for this item",
+      });
+    }
+
+    const newPage = new ThankYouPage({
+      linkedTo: {
+        kind: type,
+        item: id,
+      },
+      title,
+      embedCode,
+      note,
+      isActive,
+    });
+
+    await newPage.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Thank you page created successfully",
+      data: newPage,
+    });
+  } catch (error) {
+    console.error("Error in createThankyouPage:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error creating thank you page",
+    });
+  }
+};
+
+const updateThankyouPage = async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    const { title, embedCode, note, isActive } = req.body;
+
+    // Validate inputs
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid item ID",
+      });
+    }
+
+    if (!["course", "digital-product"].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid type. Must be 'course' or 'digital-product'",
+      });
+    }
+
+    if (!title || !embedCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Title and Embed Code are required.",
+      });
+    }
+
+    const updatedPage = await ThankYouPage.findOneAndUpdate(
+      {
+        "linkedTo.kind": type,
+        "linkedTo.item": id,
+      },
+      {
+        title,
+        embedCode,
+        note,
+        isActive,
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    if (!updatedPage) {
+      return res.status(404).json({
+        success: false,
+        message: "Thank You Page not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Thank You Page updated successfully",
+      data: updatedPage,
+    });
+  } catch (error) {
+    console.error("Error in updateThankyouPage:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while updating Thank You Page",
+    });
+  }
+};
 
 module.exports = {
   getCourse,
@@ -1281,5 +1610,11 @@ module.exports = {
   changeProductStatus,
   getEditProductDetails,
   UpdateProductDetails,
-  CheckSalesPage
+  CheckSalesPage,
+  CheckCheckoutPage,
+  GetEditCheckoutDetails,
+  CheckThankoutPage,
+  getEditThankyouPage,
+  createThankyouPage,
+  updateThankyouPage,
 };

@@ -30,6 +30,12 @@ const {
   getEditProductDetails,
   UpdateProductDetails,
   CheckSalesPage,
+  CheckCheckoutPage,
+  GetEditCheckoutDetails,
+  CheckThankoutPage,
+  getEditThankyouPage,
+  createThankyouPage,
+  updateThankyouPage,
 } = require("../Controller/CourseController");
 
 const {
@@ -101,20 +107,74 @@ adminRoute.get(
 adminRoute.post(
   "/create-sales-page/:type/:id",
   uploadMiddleware,
+  authenticateAccessToken,
   isAdmin,
   createSalesPage
 );
 adminRoute.put(
-  "/assets/course/update-sales-page/:courseId",
+  "/assets/update-sales-page/:type/:id",
   uploadMiddleware,
+  authenticateAccessToken,
   isAdmin,
   updateSalesPage
 );
+
+//CHECKOUT
+adminRoute.get(
+  "/assets/file/check-checkout-page/:type/:id",
+  authenticateAccessToken,
+  isAdmin,
+  CheckCheckoutPage
+);
+
 adminRoute.post(
-  "/assets/course/create-checkout-page/:courseId",
+  "/assets/create-checkout-page/:type/:id",
   uploadMiddleware,
+  authenticateAccessToken,
   isAdmin,
   createCheckout
+);
+
+adminRoute.get(
+  "/assets/get-checkout-page/:type/:id",
+  authenticateAccessToken,
+  isAdmin,
+  GetEditCheckoutDetails
+);
+
+adminRoute.put(
+  "/assets/update-checkout-page/:type/:id",
+  uploadMiddleware,
+  authenticateAccessToken,
+  isAdmin,
+  createCheckout
+);
+
+//THANK YOU PAGE
+adminRoute.get(
+  "/assets/file/check-thankyou-page/:type/:id",
+  authenticateAccessToken,
+  isAdmin,
+  CheckThankoutPage
+);
+adminRoute.get(
+  "/assets/get-edit-thankyou-page/:type/:id",
+  authenticateAccessToken,
+  isAdmin,
+  getEditThankyouPage
+);
+
+adminRoute.post(
+  "/assets/create-thankyou-page/:type/:id",
+  authenticateAccessToken,
+  isAdmin,
+  createThankyouPage
+);
+adminRoute.put(
+  "/assets/update-thankyou-page/:type/:id",
+  authenticateAccessToken,
+  isAdmin,
+  updateThankyouPage
 );
 
 //Module...
@@ -231,7 +291,11 @@ adminRoute.put(
   UpdateProductDetails
 );
 
-adminRoute.get("/assets/file/check-sales-page/digital-product/:id", authenticateAccessToken, CheckSalesPage)
+adminRoute.get(
+  "/assets/file/check-sales-page/digital-product/:id",
+  authenticateAccessToken,
+  CheckSalesPage
+);
 //Contacts...
 adminRoute.get(
   "/crm/contact/get-contacts",

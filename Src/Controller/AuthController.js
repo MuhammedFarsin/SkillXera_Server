@@ -259,22 +259,97 @@ const resetPassword = async (req, res) => {
 }; 
 const refreshToken = async (req, res) => {
   try {
+    // 1. Get refresh token from cookies
+    console.log('is callin')
     const { refreshToken } = req.cookies;
     if (!refreshToken) {
-      return res.status(400).json({ message: "Refresh token required" });
+      return res.status(401).json({ 
+        success: false,
+        message: "Refresh token required",
+        code: "MISSING_REFRESH_TOKEN"
+      });
     }
 
+    // 2. Verify refresh token
     const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-    // console.log('this is decoded :',decoded)
-    const user = await User.findOne({ email: decoded.email });
+    
+    // 3. Find user in database
+    const user = await User.findOne({ email: decoded.email }).select('+refreshTokens');
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "User not found",
+        code: "USER_NOT_FOUND"
+      });
     }
-    const newAccessToken = generateAccessToken(user);
-    res.status(200).json({ accessToken: newAccessToken });
+
+    // 4. Check if refresh token is still valid in user's record
+    if (!user.refreshTokens.includes(refreshToken)) {
+      return res.status(403).json({ 
+        success: false,
+        message: "Refresh token revoked",
+        code: "TOKEN_REVOKED"
+      });
+    }
+
+    // 5. Generate new tokens
+    const newAccessToken = generateAccessToken({
+      id: user._id,
+      email: user.email,
+      isAdmin: user.isAdmin
+    });
+    
+    // 6. Generate new refresh token (token rotation)
+    const newRefreshToken = generateRefreshToken({
+      id: user._id,
+      email: user.email,
+      isAdmin: user.isAdmin
+    });
+
+    // 7. Update user's refresh tokens (remove old, add new)
+    user.refreshToken = user.refreshToken.filter(token => token !== refreshToken);
+    user.refreshToken.push(newRefreshToken);
+    await user.save();
+
+    // 8. Set new refresh token in HTTP-only cookie
+    res.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    // 9. Return new access token
+    return res.status(200).json({ 
+      success: true,
+      accessToken: newAccessToken 
+    });
+
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    console.error("Refresh token error:", error);
+    
+    // Handle specific JWT errors
+    if (error instanceof jwt.JsonWebTokenError) {
+      return res.status(403).json({ 
+        success: false,
+        message: "Invalid refresh token",
+        code: "INVALID_TOKEN"
+      });
+    }
+    
+    if (error instanceof jwt.TokenExpiredError) {
+      return res.status(403).json({ 
+        success: false,
+        message: "Refresh token expired",
+        code: "TOKEN_EXPIRED"
+      });
+    }
+
+    return res.status(500).json({ 
+      success: false,
+      message: "Internal Server Error",
+      code: "SERVER_ERROR"
+    });
   }
 };
 const logout =  async (req, res) => {
