@@ -36,6 +36,11 @@ const {
   getEditThankyouPage,
   createThankyouPage,
   updateThankyouPage,
+  getAllOrderBumps,
+  CreateOrderBumps,
+  GetEditOrderBump,
+  UpdateOrderBump,
+  DeleteOrderBump,
 } = require("../Controller/CourseController");
 
 const {
@@ -372,6 +377,40 @@ adminRoute.delete(
   authenticateAccessToken,
   isAdmin,
   deleteTag
+);
+
+//ORDER BUMP
+adminRoute.get(
+  "/assets/get-order-bumps",
+  authenticateAccessToken,
+  isAdmin,
+  getAllOrderBumps
+);
+adminRoute.post(
+  "/assets/create-order-bump",
+  authenticateAccessToken,
+  uploadMiddleware,
+  isAdmin,
+  CreateOrderBumps
+);
+adminRoute.get(
+  "/assets/get-edit-order-bumps/:id",
+  authenticateAccessToken,
+  isAdmin,
+  GetEditOrderBump
+);
+adminRoute.put(
+  "/assets/update-order-bump/:id",
+  uploadMiddleware,
+  authenticateAccessToken,
+  isAdmin,
+  UpdateOrderBump
+);
+adminRoute.delete(
+  "/assets/delete-order-bump/:id",
+  authenticateAccessToken,
+  isAdmin,
+  DeleteOrderBump
 );
 
 //transaction

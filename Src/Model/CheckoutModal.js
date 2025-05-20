@@ -6,64 +6,70 @@ const checkoutPageSchema = new mongoose.Schema(
       kind: {
         type: String,
         enum: ["course", "digital-product"],
-        required: true
+        required: true,
       },
       item: {
         type: mongoose.Schema.Types.ObjectId,
         required: true,
-        refPath: 'linkedTo.kind'
-      }
+        refPath: "linkedTo.kind",
+      },
     },
     topHeading: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     subHeading: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     checkoutImage: {
-      type: String, // URL or filename
-      required: true
+      type: String,
+      required: true,
     },
-    lines: [{
-      type: String, // Array of rich text strings
-      required: true
-    }],
-    // Additional fields you might want
+    lines: [
+      {
+        type: String,
+        required: true,
+      },
+    ],
+
     isActive: {
       type: Boolean,
-      default: true
+      default: true,
     },
-    orderBump: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Product" // Reference to an optional order bump product
-    },
+    orderBumps: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "OrderBump",
+      },
+    ],
+
     thankYouPage: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "ThankYouPage" // Optional reference to a thank you page
-    }
+      ref: "ThankYouPage",
+    },
   },
   {
     timestamps: true,
     toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    toObject: { virtuals: true },
   }
 );
 
-// Index for faster queries
-checkoutPageSchema.index({ 'linkedTo.kind': 1, 'linkedTo.item': 1 }, { unique: true });
+checkoutPageSchema.index(
+  { "linkedTo.kind": 1, "linkedTo.item": 1 },
+  { unique: true }
+);
 
-// Virtual population (optional)
-checkoutPageSchema.virtual('product', {
-  ref: function() {
+checkoutPageSchema.virtual("product", {
+  ref: function () {
     return this.linkedTo.kind;
   },
-  localField: 'linkedTo.item',
-  foreignField: '_id',
-  justOne: true
+  localField: "linkedTo.item",
+  foreignField: "_id",
+  justOne: true,
 });
 
 const CheckoutPage = mongoose.model("CheckoutPage", checkoutPageSchema);

@@ -5,6 +5,7 @@ const SalesPage = require("../Model/SalesModal");
 const CheckoutPage = require("../Model/CheckoutModal");
 const DigitalProduct = require("../Model/DigitalProductModal");
 const ThankYouPage = require("../Model/ThankyouModal");
+const OrderBump = require("../Model/OrderBumbModel");
 
 const path = require("path");
 const fs = require("fs");
@@ -1579,6 +1580,184 @@ const updateThankyouPage = async (req, res) => {
   }
 };
 
+const getAllOrderBumps = async (req, res) => {
+  try {
+    const orderBumps = await OrderBump.find()
+      .populate('targetProduct', 'title name')
+      .populate('bumpProduct', 'name price');
+
+    return res.status(200).json({
+      success: true,
+      data: orderBumps
+    });
+  } catch (error) {
+    console.error("Error in getAllOrderBumps:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching order bumps",
+    });
+  }
+};
+
+// Create new order bump
+const CreateOrderBumps = async (req, res) => {
+  try {
+    const {
+      displayName,
+      description,
+      bumpPrice,
+      targetProduct,
+      targetProductModel,
+      bumpProduct,
+      isActive,
+      minCartValue
+    } = req.body;
+
+    if (!displayName || !bumpPrice || !targetProduct || !bumpProduct) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required fields"
+      });
+    }
+
+    // Create new order bump
+    const newOrderBump = new OrderBump({
+      displayName,
+      description,
+      bumpPrice,
+      targetProduct,
+      targetProductModel,
+      bumpProduct,
+      isActive: isActive === 'true' || isActive === true,
+      minCartValue: minCartValue || 0,
+      image: req.file?.path || null
+    });
+
+    await newOrderBump.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Order bump created successfully",
+      data: newOrderBump
+    });
+  } catch (error) {
+    console.error("Error in CreateOrderBumps:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while creating order bump",
+    });
+  }
+};
+
+// Get single order bump for editing
+const GetEditOrderBump = async (req, res) => {
+  try {
+    const orderBump = await OrderBump.findById(req.params.id)
+      .populate('targetProduct', 'title name')
+      .populate('bumpProduct', 'name price');
+
+    if (!orderBump) {
+      return res.status(404).json({
+        success: false,
+        message: "Order bump not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: orderBump
+    });
+  } catch (error) {
+    console.error("Error in GetEditOrderBump:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching order bump",
+    });
+  }
+};
+
+// Update order bump
+const UpdateOrderBump = async (req, res) => {
+  try {
+    const {
+      displayName,
+      description,
+      bumpPrice,
+      targetProduct,
+      targetProductModel,
+      bumpProduct,
+      isActive,
+      minCartValue
+    } = req.body;
+
+    const updateData = {
+      displayName,
+      description,
+      bumpPrice,
+      targetProduct,
+      targetProductModel,
+      bumpProduct,
+      isActive: isActive === 'true' || isActive === true,
+      minCartValue: minCartValue || 0
+    };
+
+    if (req.file) {
+      updateData.image = req.file.path;
+    }
+
+    const updatedBump = await OrderBump.findByIdAndUpdate(
+      req.params.id,
+      updateData, 
+      { new: true }
+    );
+
+    if (!updatedBump) {
+      return res.status(404).json({
+        success: false,
+        message: "Order bump not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Order bump updated successfully",
+      data: updatedBump
+    });
+  } catch (error) {
+    console.error("Error in UpdateOrderBump:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while updating order bump",
+    });
+  }
+};
+
+// Delete order bump
+const DeleteOrderBump = async (req, res) => {
+  try {
+    const deletedBump = await OrderBump.findByIdAndDelete(req.params.id);
+
+    if (!deletedBump) {
+      return res.status(404).json({
+        success: false,
+        message: "Order bump not found"
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Order bump deleted successfully"
+    });
+  } catch (error) {
+    console.error("Error in DeleteOrderBump:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while deleting order bump",
+    });
+  }
+};
+
+
 module.exports = {
   getCourse,
   createCourse,
@@ -1617,4 +1796,9 @@ module.exports = {
   getEditThankyouPage,
   createThankyouPage,
   updateThankyouPage,
+  getAllOrderBumps,
+  CreateOrderBumps,
+  GetEditOrderBump,
+  UpdateOrderBump,
+  DeleteOrderBump,
 };
