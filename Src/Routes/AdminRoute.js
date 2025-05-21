@@ -41,6 +41,9 @@ const {
   GetEditOrderBump,
   UpdateOrderBump,
   DeleteOrderBump,
+  CheckCheckoutPageforCourse,
+  CheckSalesPageforCourse,
+  CheckThankoutPageforCourse
 } = require("../Controller/CourseController");
 
 const {
@@ -103,6 +106,27 @@ adminRoute.put(
   updateCourse
 );
 
+// Consistent route paths and middleware
+adminRoute.get(
+  "/assets/check-sales-page/course/:id",
+  authenticateAccessToken,
+  isAdmin,
+  CheckSalesPageforCourse
+);
+
+adminRoute.get(
+  "/assets/check-checkout-page/course/:id",
+  authenticateAccessToken,
+  isAdmin,
+  CheckCheckoutPageforCourse
+);
+
+adminRoute.get(
+  "/assets/check-thankyou-page/course/:id",
+  authenticateAccessToken,
+  isAdmin,
+  CheckThankoutPageforCourse
+);
 //sales-page
 adminRoute.get(
   "/assets/get-sales-page/:type/:id",

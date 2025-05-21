@@ -1331,6 +1331,55 @@ const UpdateProductDetails = async (req, res) => {
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
+const CheckSalesPageforCourse = async (req, res) => {
+  try {
+    const salesPage = await SalesPage.findOne({
+      "linkedTo.kind": "Course",
+      "linkedTo.item": req.params.id,
+    });
+    res.json({ exists: !!salesPage });
+  } catch (error) {
+    res.status(500).json({ message: "Error checking sales page" });
+  }
+};
+
+const CheckCheckoutPageforCourse = async (req, res) => {
+  try {
+    const checkoutPage = await CheckoutPage.findOne({
+      "linkedTo.kind": "course",
+      "linkedTo.item": req.params.id,
+    });
+
+    res.json({ exists: !!checkoutPage });
+  } catch (error) {
+    console.error("Error checking checkout page:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error checking checkout page",
+    });
+  }
+};
+
+const CheckThankoutPageforCourse = async (req, res) => {
+  try {
+    const existingPage = await ThankYouPage.findOne({
+      "linkedTo.kind": "course",
+      "linkedTo.item": req.params.id,
+    });
+
+    res.status(200).json({
+      success: true,
+      exists: !!existingPage,
+      data: existingPage || null,
+    });
+  } catch (error) {
+    console.error("Error in CheckThankoutPage:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error checking thank you page existence",
+    });
+  }
+};
 
 const CheckSalesPage = async (req, res) => {
   try {
@@ -1343,6 +1392,7 @@ const CheckSalesPage = async (req, res) => {
     res.status(500).json({ message: "Error checking sales page" });
   }
 };
+
 
 const CheckCheckoutPage = async (req, res) => {
   try {
@@ -1364,6 +1414,7 @@ const CheckCheckoutPage = async (req, res) => {
     });
   }
 };
+
 const GetEditCheckoutDetails = async (req, res) => {
   try {
     const { type, id } = req.params;
@@ -1579,6 +1630,8 @@ const updateThankyouPage = async (req, res) => {
     });
   }
 };
+
+
 
 const getAllOrderBumps = async (req, res) => {
   try {
@@ -1801,4 +1854,7 @@ module.exports = {
   GetEditOrderBump,
   UpdateOrderBump,
   DeleteOrderBump,
+  CheckCheckoutPageforCourse,
+  CheckSalesPageforCourse,
+  CheckThankoutPageforCourse
 };
