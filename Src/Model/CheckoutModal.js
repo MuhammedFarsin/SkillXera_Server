@@ -39,17 +39,6 @@ const checkoutPageSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    orderBumps: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "OrderBump",
-      },
-    ],
-
-    thankYouPage: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "ThankYouPage",
-    },
   },
   {
     timestamps: true,

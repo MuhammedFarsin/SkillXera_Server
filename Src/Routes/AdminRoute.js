@@ -43,7 +43,8 @@ const {
   DeleteOrderBump,
   CheckCheckoutPageforCourse,
   CheckSalesPageforCourse,
-  CheckThankoutPageforCourse
+  CheckThankoutPageforCourse,
+  UpdateCheckoutPage
 } = require("../Controller/CourseController");
 
 const {
@@ -133,6 +134,7 @@ adminRoute.get(
   authenticateAccessToken,
   GetSalesPage
 );
+
 adminRoute.post(
   "/create-sales-page/:type/:id",
   uploadMiddleware,
@@ -176,7 +178,7 @@ adminRoute.put(
   uploadMiddleware,
   authenticateAccessToken,
   isAdmin,
-  createCheckout
+  UpdateCheckoutPage
 );
 
 //THANK YOU PAGE

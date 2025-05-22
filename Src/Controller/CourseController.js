@@ -69,9 +69,21 @@ const createCourse = async (req, res) => {
 const deleteCourse = async (req, res) => {
   try {
     const courseId = req.params.Id;
+
+    // 1. Delete the course
     const course = await Course.findByIdAndDelete(courseId);
-    if (!course) return res.status(404).json({ message: "Course not found" });
-    res.json({ message: "Course deleted successfully" });
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // 2. Delete related pages
+    await Promise.all([
+      SalesPage.deleteMany({ 'linkedTo.kind': 'Course', 'linkedTo.item': courseId }),
+      CheckoutPage.deleteMany({ 'linkedTo.kind': 'course', 'linkedTo.item': courseId }),
+      ThankYouPage.deleteMany({ 'linkedTo.kind': 'course', 'linkedTo.item': courseId })
+    ]);
+
+    res.json({ message: "Course pages deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -958,8 +970,8 @@ const updateSalesPage = async (req, res) => {
 
 const createCheckout = async (req, res) => {
   try {
-    const { topHeading, subHeading } = req.body;
-    const { type, id } = req.params; // Changed from courseId to id
+    const { topHeading, subHeading, lines = [] } = req.body;
+    const { type, id } = req.params;
     const checkoutImageFile = req.files?.checkoutImage?.[0];
 
     // Validate required fields
@@ -967,100 +979,61 @@ const createCheckout = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Top heading, sub heading, and image are required",
-        code: "MISSING_FIELDS",
       });
     }
 
-    // Process lines (handle both array and single string)
-    const lines = Array.isArray(req.body.lines)
-      ? req.body.lines.filter((line) => line.trim() !== "")
-      : req.body.lines
-      ? [req.body.lines.trim()]
-      : [];
-
-    if (lines.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "At least one content line is required",
-        code: "MISSING_LINES",
-      });
-    }
-
-    // Validate type
+    // Validate product type
     const validTypes = ["course", "digital-product"];
     if (!validTypes.includes(type)) {
       return res.status(400).json({
         success: false,
         message: "Invalid product type",
-        code: "INVALID_TYPE",
       });
     }
 
-    // Verify the referenced product exists
+    // Check if product exists
     const ProductModel = type === "course" ? Course : DigitalProduct;
-    const productExists = await ProductModel.exists({ _id: id });
-    if (!productExists) {
+    const product = await ProductModel.findById(id);
+    if (!product) {
       return res.status(404).json({
         success: false,
-        message: `${type} not found`,
-        code: "PRODUCT_NOT_FOUND",
+        message: "Product not found",
       });
     }
 
-    // Create new checkout page
-    const newCheckout = new CheckoutPage({
-      linkedTo: {
-        kind: type,
-        item: id,
-      },
-      topHeading: topHeading.trim(),
-      subHeading: subHeading.trim(),
+    // Create checkout page
+    const checkoutPage = new CheckoutPage({
+      linkedTo: { kind: type, item: id },
+      topHeading,
+      subHeading,
       checkoutImage: checkoutImageFile.filename,
-      lines,
+      lines: Array.isArray(lines)
+        ? lines.filter((line) => line.trim())
+        : [lines.trim()],
       isActive: true,
     });
 
-    await newCheckout.save();
+    await checkoutPage.save();
 
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
-      message: "Checkout page created successfully",
-      data: {
-        checkoutId: newCheckout._id,
-        productId: id,
-        type,
-      },
+      message: "Checkout page created",
+      data: checkoutPage,
     });
   } catch (error) {
-    console.error("Checkout Creation Error:", error);
-
-    // Handle duplicate key error (unique index violation)
+    console.error("Error:", error);
     if (error.code === 11000) {
       return res.status(409).json({
         success: false,
         message: "Checkout page already exists for this product",
-        code: "DUPLICATE_CHECKOUT",
       });
     }
-
-    // Handle validation errors
-    if (error.name === "ValidationError") {
-      return res.status(400).json({
-        success: false,
-        message: "Validation failed",
-        errors: Object.values(error.errors).map((e) => e.message),
-        code: "VALIDATION_ERROR",
-      });
-    }
-
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
-      message: "Internal server error",
-      code: "SERVER_ERROR",
+      message: "Server error",
     });
   }
 };
-
 const getDigitalProduct = async (req, res) => {
   try {
     const fetchedDigitalProduct = await DigitalProduct.find();
@@ -1393,7 +1366,6 @@ const CheckSalesPage = async (req, res) => {
   }
 };
 
-
 const CheckCheckoutPage = async (req, res) => {
   try {
     const { type, id } = req.params;
@@ -1427,11 +1399,10 @@ const GetEditCheckoutDetails = async (req, res) => {
       });
     }
 
-    // Find the checkout page using the correct schema fields
     const checkoutPage = await CheckoutPage.findOne({
       "linkedTo.kind": type,
       "linkedTo.item": id,
-    }).populate("orderBump thankYouPage");
+    });
 
     if (!checkoutPage) {
       return res.status(404).json({
@@ -1450,8 +1421,6 @@ const GetEditCheckoutDetails = async (req, res) => {
         subHeading: checkoutPage.subHeading,
         checkoutImage: checkoutPage.checkoutImage,
         lines: checkoutPage.lines,
-        orderBump: checkoutPage.orderBump,
-        thankYouPage: checkoutPage.thankYouPage,
       },
     });
   } catch (error) {
@@ -1463,6 +1432,77 @@ const GetEditCheckoutDetails = async (req, res) => {
   }
 };
 
+const UpdateCheckoutPage = async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    
+    const topHeading = req.body.topHeading;
+    const subHeading = req.body.subHeading;
+    const existingImage = req.body.existingImage;
+    const lines = req.body.lines ? 
+      (Array.isArray(req.body.lines) ? req.body.lines : [req.body.lines]) : 
+      [];
+
+    if (!topHeading || !subHeading) {
+      return res.status(400).json({
+        success: false,
+        message: "Top heading and sub heading are required",
+      });
+    }
+
+    if (!lines || lines.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one content line is required",
+      });
+    }
+
+    const existingCheckout = await CheckoutPage.findOne({
+      "linkedTo.kind": type,
+      "linkedTo.item": id,
+    });
+
+    if (!existingCheckout) {
+      return res.status(404).json({
+        success: false,
+        message: "Checkout page not found",
+      });
+    }
+
+    const updateData = {
+      topHeading,
+      subHeading,
+      lines,
+    };
+
+    if (req.files && req.files.checkoutImage && req.files.checkoutImage.length > 0) {
+     updateData.checkoutImage = req.files.checkoutImage[0].filename;
+    } else if (existingImage && existingImage !== "undefined") {
+      updateData.checkoutImage = existingImage;
+    } else {
+      updateData.checkoutImage = existingCheckout.checkoutImage;
+    }
+
+    const updatedCheckout = await CheckoutPage.findOneAndUpdate(
+      { "linkedTo.kind": type, "linkedTo.item": id },
+      updateData,
+      { new: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Checkout page updated successfully",
+      data: updatedCheckout,
+    });
+  } catch (error) {
+    console.error("Error in UpdateCheckoutPage:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error updating checkout page",
+      error: error.message,
+    });
+  }
+};
 const CheckThankoutPage = async (req, res) => {
   try {
     const { type, id } = req.params;
@@ -1631,17 +1671,15 @@ const updateThankyouPage = async (req, res) => {
   }
 };
 
-
-
 const getAllOrderBumps = async (req, res) => {
   try {
     const orderBumps = await OrderBump.find()
-      .populate('targetProduct', 'title name')
-      .populate('bumpProduct', 'name price');
+      .populate("targetProduct", "title name")
+      .populate("bumpProduct", "name price");
 
     return res.status(200).json({
       success: true,
-      data: orderBumps
+      data: orderBumps,
     });
   } catch (error) {
     console.error("Error in getAllOrderBumps:", error);
@@ -1663,13 +1701,13 @@ const CreateOrderBumps = async (req, res) => {
       targetProductModel,
       bumpProduct,
       isActive,
-      minCartValue
+      minCartValue,
     } = req.body;
 
     if (!displayName || !bumpPrice || !targetProduct || !bumpProduct) {
       return res.status(400).json({
         success: false,
-        message: "Missing required fields"
+        message: "Missing required fields",
       });
     }
 
@@ -1681,9 +1719,9 @@ const CreateOrderBumps = async (req, res) => {
       targetProduct,
       targetProductModel,
       bumpProduct,
-      isActive: isActive === 'true' || isActive === true,
+      isActive: isActive === "true" || isActive === true,
       minCartValue: minCartValue || 0,
-      image: req.file?.path || null
+      image: req.file?.path || null,
     });
 
     await newOrderBump.save();
@@ -1691,7 +1729,7 @@ const CreateOrderBumps = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Order bump created successfully",
-      data: newOrderBump
+      data: newOrderBump,
     });
   } catch (error) {
     console.error("Error in CreateOrderBumps:", error);
@@ -1706,19 +1744,19 @@ const CreateOrderBumps = async (req, res) => {
 const GetEditOrderBump = async (req, res) => {
   try {
     const orderBump = await OrderBump.findById(req.params.id)
-      .populate('targetProduct', 'title name')
-      .populate('bumpProduct', 'name price');
+      .populate("targetProduct", "title name")
+      .populate("bumpProduct", "name price");
 
     if (!orderBump) {
       return res.status(404).json({
         success: false,
-        message: "Order bump not found"
+        message: "Order bump not found",
       });
     }
 
     return res.status(200).json({
       success: true,
-      data: orderBump
+      data: orderBump,
     });
   } catch (error) {
     console.error("Error in GetEditOrderBump:", error);
@@ -1740,7 +1778,7 @@ const UpdateOrderBump = async (req, res) => {
       targetProductModel,
       bumpProduct,
       isActive,
-      minCartValue
+      minCartValue,
     } = req.body;
 
     const updateData = {
@@ -1750,8 +1788,8 @@ const UpdateOrderBump = async (req, res) => {
       targetProduct,
       targetProductModel,
       bumpProduct,
-      isActive: isActive === 'true' || isActive === true,
-      minCartValue: minCartValue || 0
+      isActive: isActive === "true" || isActive === true,
+      minCartValue: minCartValue || 0,
     };
 
     if (req.file) {
@@ -1760,21 +1798,21 @@ const UpdateOrderBump = async (req, res) => {
 
     const updatedBump = await OrderBump.findByIdAndUpdate(
       req.params.id,
-      updateData, 
+      updateData,
       { new: true }
     );
 
     if (!updatedBump) {
       return res.status(404).json({
         success: false,
-        message: "Order bump not found"
+        message: "Order bump not found",
       });
     }
 
     return res.status(200).json({
       success: true,
       message: "Order bump updated successfully",
-      data: updatedBump
+      data: updatedBump,
     });
   } catch (error) {
     console.error("Error in UpdateOrderBump:", error);
@@ -1793,13 +1831,13 @@ const DeleteOrderBump = async (req, res) => {
     if (!deletedBump) {
       return res.status(404).json({
         success: false,
-        message: "Order bump not found"
+        message: "Order bump not found",
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Order bump deleted successfully"
+      message: "Order bump deleted successfully",
     });
   } catch (error) {
     console.error("Error in DeleteOrderBump:", error);
@@ -1809,7 +1847,6 @@ const DeleteOrderBump = async (req, res) => {
     });
   }
 };
-
 
 module.exports = {
   getCourse,
@@ -1856,5 +1893,6 @@ module.exports = {
   DeleteOrderBump,
   CheckCheckoutPageforCourse,
   CheckSalesPageforCourse,
-  CheckThankoutPageforCourse
+  CheckThankoutPageforCourse,
+  UpdateCheckoutPage,
 };
