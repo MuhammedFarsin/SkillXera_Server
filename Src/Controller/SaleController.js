@@ -3,6 +3,7 @@ const Payment = require("../Model/PurchaseModal");
 const Contact = require("../Model/ContactModel");
 const SalesPage = require("../Model/SalesModal");
 const CheckoutPage = require("../Model/CheckoutModal");
+const OrderBump = require("../Model/OrderBumbModel");
 const { emitNewLead } = require("../socket");
 const Lead = require("../Model/LeadModal");
 const User = require("../Model/UserModel");
@@ -114,17 +115,17 @@ const getSalesDetails = async (req, res) => {
     const { type, id } = req.params;
 
     // Validate type parameter
-    if (!['course', 'digital-product'].includes(type)) {
+    if (!["course", "digital-product"].includes(type)) {
       return res.status(400).json({ message: "Invalid type parameter" });
     }
 
     // Convert URL type to schema enum value
-    const kind = type === 'course' ? 'Course' : 'DigitalProduct';
+    const kind = type === "course" ? "Course" : "DigitalProduct";
 
-    const salesPage = await SalesPage.findOne({ 
-      'linkedTo.kind': kind,
-      'linkedTo.item': id
-    }).populate('linkedTo.item');
+    const salesPage = await SalesPage.findOne({
+      "linkedTo.kind": kind,
+      "linkedTo.item": id,
+    }).populate("linkedTo.item");
 
     if (!salesPage) {
       return res.status(404).json({ message: "Sales page not found" });
@@ -474,11 +475,17 @@ const verifyCashfreeOrder = async (req, res) => {
 };
 const SaleCreateCashfreeOrder = async (req, res) => {
   try {
-    const { amount, currency, productId, productType, customer_details } = req.body;
+    const { amount, currency, productId, productType, customer_details } =
+      req.body;
 
     // Validate request parameters
-    if (!amount || !currency || !productId || !customer_details || 
-        !["Course", "DigitalProduct"].includes(productType)) {
+    if (
+      !amount ||
+      !currency ||
+      !productId ||
+      !customer_details ||
+      !["Course", "DigitalProduct"].includes(productType)
+    ) {
       return res.status(400).json({ error: "Invalid request parameters" });
     }
 
@@ -492,7 +499,13 @@ const SaleCreateCashfreeOrder = async (req, res) => {
     let lead = await Lead.findOne({ email, productId, productType });
 
     if (!lead) {
-      lead = await Lead.create({ username, email, phone, productId, productType });
+      lead = await Lead.create({
+        username,
+        email,
+        phone,
+        productId,
+        productType,
+      });
       emitNewLead({
         _id: lead._id,
         username,
@@ -571,7 +584,7 @@ const SaleCreateCashfreeOrder = async (req, res) => {
 const SaleVerifyCashfreeOrder = async (req, res) => {
   try {
     const { order_id, productId, productType, email } = req.body;
-    
+
     if (!order_id || !["Course", "DigitalProduct"].includes(productType)) {
       return res.status(400).json({ message: "Invalid request parameters" });
     }
@@ -609,7 +622,7 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
     const { order_amount, customer_details, created_at } = orderData;
     const { customer_name, customer_email, customer_phone } = customer_details;
 
-     let finalProductId = productId;
+    let finalProductId = productId;
     let finalProductType = productType;
 
     if (!finalProductId) {
@@ -1209,12 +1222,12 @@ const verifyRazorpayPayment = async (req, res) => {
 };
 const SaleCreateRazorpayOrder = async (req, res) => {
   try {
-    const { amount, currency, courseId, customer_details } = req.body;
-
+    const { amount, currency, productId, customer_details } = req.body;
+    console.log(req.body);
     if (
       typeof amount !== "number" ||
       !currency ||
-      !courseId ||
+      !productId ||
       !customer_details
     ) {
       return res.status(400).json({ error: "Invalid request parameters" });
@@ -1223,17 +1236,18 @@ const SaleCreateRazorpayOrder = async (req, res) => {
     const { username, email, phone } = customer_details;
 
     // 💰 Convert amount to paise and validate
-    const amountInPaise = Math.round(amount * 100);
+    const amountInPaise = amount; // Assume amount is already in paise
+
     if (amountInPaise < 100) {
       return res.status(400).json({ error: "Amount must be at least ₹1" });
     }
 
     // Create lead and contact (simplified)
-    let lead = await Lead.findOne({ email, courseId });
+    let lead = await Lead.findOne({ email, productId });
 
     if (!lead) {
       // Create a new lead if not exists
-      lead = await Lead.create({ username, email, phone, courseId });
+      lead = await Lead.create({ username, email, phone, productId });
 
       // Emit socket event for new lead
       emitNewLead({
@@ -1241,7 +1255,7 @@ const SaleCreateRazorpayOrder = async (req, res) => {
         username,
         email,
         phone,
-        courseId,
+        productId,
         createdAt: lead.createdAt,
       });
     }
@@ -1266,17 +1280,17 @@ const SaleCreateRazorpayOrder = async (req, res) => {
 
     // 🛒 Create Razorpay Order
     const options = {
-      amount: Math.max(amount * 100, 100), // Ensure minimum ₹1
+      amount: Math.max(amountInPaise, 100),
       currency: currency || "INR",
-      receipt: `receipt_${Date.now()}`,
+      receipt: `receipt_${Date.now()}`,  
       notes: {
         ...(customer_details || {}),
-        courseId,
+        productId,
       },
-      payment_capture: 1, // Auto-capture payments
+      payment_capture: 1,
     };
 
-     const order = await razorpay.orders.create(options);
+    const order = await razorpay.orders.create(options);
 
     res.status(200).json({ data: order });
   } catch (error) {
@@ -1289,260 +1303,296 @@ const SaleCreateRazorpayOrder = async (req, res) => {
 
 const SaleVerifyRazorpayPayment = async (req, res) => {
   try {
+    console.log(req.body)
     const {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      courseId,
+      productId,
+      type, 
+      orderBumps = []
     } = req.body;
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid Payment Details" });
+    // Validate required fields
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !productId || !type) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Missing required payment details" 
+      });
     }
 
-    const razorpayOrder = await razorpay.orders.fetch(razorpay_order_id);
-
-    const { username, email } = razorpayOrder.notes;
-    const phone = Number(razorpayOrder.notes.phone);
-
+    // Verify payment signature
     const generated_signature = crypto
       .createHmac("sha256", process.env.RAZORPAY_SECRET_ID)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    const isPaymentSuccess = generated_signature === razorpay_signature;
-
-    const courseDetails = await Course.findById(courseId);
-    if (!courseDetails) {
-      return res
-        .status(404)
-        .json({ message: "Course not found", status: "failed" });
+    if (generated_signature !== razorpay_signature) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Payment verification failed - invalid signature" 
+      });
     }
 
+    // Fetch Razorpay order details
+    const razorpayOrder = await razorpay.orders.fetch(razorpay_order_id);
+    const notes = razorpayOrder.notes || {};
+
+    // Extract customer details
+    const { username, email, phone } = notes;
+
+    // Handle different product types
+    if (type === 'course') {
+      return await handleCourseVerification({
+        razorpay_order_id,
+        razorpay_payment_id,
+        productId,
+        username,
+        email,
+        phone,
+        amount: razorpayOrder.amount / 100, // Convert from paise to rupees
+        orderBumps,
+        res
+      });
+    } else if (type === 'digital-product') {
+      return await handleDigitalProductVerification({
+        razorpay_order_id,
+        razorpay_payment_id,
+        productId,
+        username,
+        email,
+        phone,
+        amount: razorpayOrder.amount / 100,
+        orderBumps,
+        res
+      });
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product type"
+      });
+    }
+  } catch (error) {
+    console.error("Payment verification error:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Internal server error during payment verification" 
+    });
+  }
+};
+
+// Course-specific verification handler
+const handleCourseVerification = async ({
+  razorpay_order_id,
+  razorpay_payment_id,
+  productId,
+  username,
+  email,
+  phone,
+  amount,
+  orderBumps,
+  res
+}) => {
+  try {
+    // Find or create user
     let user = await User.findOne({ email });
     let resetLink = null;
 
     if (!user) {
-      user = new User({ username, email, phone, orders: [] });
+      user = new User({ 
+        username, 
+        email, 
+        phone, 
+        orders: [],
+        enrolledCourses: [] 
+      });
       await user.save();
     }
 
-    if (!isPaymentSuccess) {
-      console.log(
-        "❌ Payment verification failed for order:",
-        razorpay_order_id
-      );
-
-      const failedPayment = new Payment({
-        username,
-        email,
-        phone,
-        courseId,
-        amount: courseDetails.salesPrice,
-        orderId: razorpay_order_id,
-        status: "Failed",
-        createdAt: new Date(),
-        paymentMethod: "Razorpay",
-        courseSnapshot: {
-          courseId: courseDetails._id,
-          title: courseDetails.title,
-          description: courseDetails.description,
-          images: courseDetails.images,
-          route: courseDetails.route,
-          buyCourse: courseDetails.buyCourse,
-          regularPrice: courseDetails.regularPrice,
-          salesPrice: courseDetails.salesPrice,
-          modules: courseDetails.modules.map((module) => ({
-            title: module.title,
-            lectures: module.lectures.map((lecture) => ({
-              title: lecture.title,
-              description: lecture.description,
-              videoUrl: lecture.videoUrl,
-              resources: lecture.resources,
-              duration: lecture.duration,
-            })),
-          })),
-        },
-      });
-
-      await failedPayment.save();
-
-      let failedTag = await Tag.findOne({ name: "Failed" });
-      if (!failedTag) {
-        failedTag = await Tag.create({ name: "Failed" });
-      }
-      let dropOffTag = await Tag.findOne({ name: "drop-off" });
-
-      const contact = await Contact.findOne({ email });
-
-      if (contact) {
-        contact.statusTag = "Failed";
-
-        if (!Array.isArray(contact.tags)) {
-          contact.tags = [];
-        }
-
-        if (dropOffTag) {
-          contact.tags = contact.tags.filter(
-            (tag) => tag.toString() !== dropOffTag._id.toString()
-          );
-        }
-
-        if (!contact.tags.includes(failedTag._id)) {
-          contact.tags.push(failedTag._id);
-        }
-
-        await contact.save();
-      }
-
-      return res.status(400).json({
+    // Get course details
+    const course = await Course.findById(productId);
+    if (!course) {
+      return res.status(404).json({ 
         success: false,
-        message: "Payment verification failed",
-        status: "failed",
-        payment: failedPayment,
+        message: "Course not found" 
       });
     }
 
+    // Check if user already purchased this course
     const existingPayment = await Payment.findOne({
       email,
-      courseId,
+      productId,
       status: "Success",
+      productType: "Course"
     });
 
     if (existingPayment) {
-      return res.status(201).json({
+      return res.status(200).json({
+        success: true,
         status: "already_paid",
-        message: "You have already purchased this course.",
-        payment: existingPayment,
+        message: "You have already purchased this course",
+        payment: existingPayment
       });
     }
 
+    // Create payment record
     const payment = new Payment({
       username,
       email,
-      phone,
-      courseId,
-      amount: courseDetails.salesPrice,
+      phone: Number(phone),
+      productId,
+      productType: "Course",
+      amount,
       orderId: razorpay_order_id,
       status: "Success",
-      createdAt: new Date(),
       paymentMethod: "Razorpay",
-      courseSnapshot: {
-        courseId: courseDetails._id,
-        title: courseDetails.title,
-        description: courseDetails.description,
-        images: courseDetails.images,
-        route: courseDetails.route,
-        buyCourse: courseDetails.buyCourse,
-        regularPrice: courseDetails.regularPrice,
-        salesPrice: courseDetails.salesPrice,
-        modules: courseDetails.modules.map((module) => ({
+      productSnapshot: {
+        courseId: course._id,
+        title: course.title,
+        description: course.description,
+        images: course.images,
+        route: course.route,
+        buyCourse: course.buyCourse,
+        regularPrice: course.regularPrice,
+        salesPrice: course.salesPrice,
+        modules: course.modules.map(module => ({
           title: module.title,
-          lectures: module.lectures.map((lecture) => ({
+          lectures: module.lectures.map(lecture => ({
             title: lecture.title,
             description: lecture.description,
             videoUrl: lecture.videoUrl,
             resources: lecture.resources,
-            duration: lecture.duration,
-          })),
-        })),
-      },
+            duration: lecture.duration
+          }))
+        }))
+      }
     });
-
     await payment.save();
 
-    if (!user.orders.includes(razorpay_order_id)) {
-      user.orders.push(razorpay_order_id);
+    // Handle order bumps if any
+    if (orderBumps.length > 0) {
+      for (const bumpId of orderBumps) {
+        const bump = await OrderBump.findById(bumpId).populate('bumpProduct');
+        if (bump) {
+          const bumpPayment = new Payment({
+            username,
+            email,
+            phone: Number(phone),
+            productId: bump.bumpProduct._id,
+            productType: "DigitalProduct",
+            amount: bump.bumpPrice,
+            orderId: razorpay_order_id,
+            status: "Success",
+            paymentMethod: "Razorpay",
+            productSnapshot: {
+              title: bump.displayName,
+              description: bump.description,
+              fileUrl: bump.bumpProduct.fileUrl,
+              regularPrice: bump.bumpPrice,
+              salesPrice: bump.bumpPrice
+            },
+            isOrderBump: true,
+            parentOrder: razorpay_order_id
+          });
+          await bumpPayment.save();
+        }
+      }
+    }
+
+    // Enroll user in course if not already enrolled
+    if (!user.enrolledCourses.includes(productId)) {
+      user.enrolledCourses.push(productId);
       await user.save();
     }
 
+    // Generate password reset link if new user
     if (!user.password) {
       const resetToken = await generateResetToken(user);
-      if (resetToken) {
-        resetLink = `${process.env.FRONTEND_URL}/set-password?token=${resetToken}&email=${email}`;
-        await user.save();
-      }
+      resetLink = `${process.env.FRONTEND_URL}/set-password?token=${resetToken}&email=${email}`;
     }
 
-    let successTag = await Tag.findOne({ name: "Success" });
-    if (!successTag) {
-      successTag = await Tag.create({ name: "Success" });
-    }
+    // Update contact tags
+    const successTag = await Tag.findOneAndUpdate(
+      { name: "Success" },
+      { name: "Success" },
+      { upsert: true, new: true }
+    );
 
-    let dropOffTag = await Tag.findOne({ name: "drop-off" });
+   // First add the successTag
+await Contact.findOneAndUpdate(
+  { email },
+  {
+    statusTag: "Success",
+    $addToSet: { tags: successTag._id },
+  },
+  { new: true }
+);
 
-    const contact = await Contact.findOne({ email });
+// Then pull the other tags
+await Contact.findOneAndUpdate(
+  { email },
+  {
+    $pull: { tags: { $in: [
+      (await Tag.findOne({ name: "drop-off" }))?._id,
+      (await Tag.findOne({ name: "Failed" }))?._id
+    ].filter(Boolean) } }
+  },
+  { new: true }
+);
 
-    if (contact) {
-      contact.statusTag = "Success";
 
-      if (!Array.isArray(contact.tags)) {
-        contact.tags = [];
-      }
-
-      if (dropOffTag) {
-        contact.tags = contact.tags.map((tag) =>
-          tag.toString() === dropOffTag._id.toString() ? successTag._id : tag
-        );
-      }
-
-      if (!contact.tags.includes(successTag._id)) {
-        contact.tags.push(successTag._id);
-      }
-
-      await contact.save();
-    }
-    const invoicePath = await generateInvoice(payment, courseDetails);
-
+    // Generate and send invoice
+    const invoicePath = await generateInvoice(payment, course);
     await sendPaymentSuccessEmail(
       user,
       email,
-      courseDetails,
+      course,
       razorpay_order_id,
       invoicePath
     );
 
+    // Track with Facebook Pixel
     const fbPixelData = {
       event_name: "Purchase",
       event_time: Math.floor(Date.now() / 1000),
       event_source_url: `${process.env.FRONTEND_URL}/payment-success`,
       user_data: {
         em: [hash(email)],
-        ph: user.phone ? [hash(String(user.phone))] : [],
+        ph: [hash(String(phone))]
       },
       custom_data: {
-        value: courseDetails.salesPrice,
+        value: amount,
         currency: "INR",
         order_id: razorpay_order_id,
-        content_name: courseDetails.title,
-        content_ids: [courseId],
+        content_name: course.title,
+        content_ids: [productId, ...orderBumps],
         content_type: "product",
       },
       action_source: "website",
     };
 
-    const fbResponse = await axios.post(
+    await axios.post(
       `https://graph.facebook.com/v18.0/${process.env.FB_PIXEL_ID}/events?access_token=${process.env.FB_ACCESS_TOKEN}`,
       { data: [fbPixelData] }
     );
 
     return res.status(200).json({
-      message: "Payment verified, course details sent, and event tracked",
-      status: "success",
+      success: true,
+      message: "Course payment verified successfully",
       payment,
       user,
-      resetLink,
+      resetLink
     });
+
   } catch (error) {
-    console.error(
-      "❌ Razorpay Payment Verification Error:",
-      error.message || error
-    );
-    return res.status(500).json({ message: "Internal Server Error" });
+    console.error("Course verification error:", error);
+    return res.status(500).json({ 
+      success: false,
+      message: "Error verifying course purchase" 
+    });
   }
 };
+
 
 const resendAccessCouseLink = async (req, res) => {
   try {
@@ -1599,25 +1649,45 @@ const resendAccessCouseLink = async (req, res) => {
 
 const GetCheckoutPage = async (req, res) => {
   try {
-    const { courseId } = req.params;
+    const { type, id } = req.params;
 
-    const checkoutpage = await CheckoutPage.findOne({ courseId })
-      .populate("courseId") // This populates the course details
-      .exec();
-
-    if (!checkoutpage) {
-      return res
-        .status(404)
-        .json({ message: "No checkout page found for this course" });
+    // Validate 'type'
+    const validTypes = ["course", "digital-product"];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: "Invalid type parameter" });
     }
 
-    res.status(200).json({
-      message: "Checkout page retrieved successfully",
-      data: checkoutpage,
+    // Fetch the checkout page
+    const checkoutPage = await CheckoutPage.findOne({
+      "linkedTo.kind": type,
+      "linkedTo.item": id,
+      isActive: true,
+    }).populate({
+      path: "product",
+      model: type === "course" ? "Course" : "DigitalProduct",
+    });
+
+    if (!checkoutPage) {
+      return res.status(404).json({ error: "Checkout page not found" });
+    }
+
+    // Fetch active order bumps for the product
+    const orderBumps = await OrderBump.find({
+      targetProduct: id,
+      targetProductModel: type === "course" ? "Course" : "DigitalProduct",
+      isActive: true,
+    }).populate("bumpProduct");
+
+    res.json({
+      data: {
+        checkoutPage,
+        product: checkoutPage.product,
+        orderBumps,
+      },
     });
   } catch (error) {
-    console.error("Error fetching checkout page:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    console.error("Error fetching checkout page details:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 };
 module.exports = {

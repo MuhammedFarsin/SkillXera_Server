@@ -11,7 +11,7 @@ const {
 } = require("../Controller/SaleController");
 
 saleRoute.get("/get-sales-page/:type/:id", getSalesDetails);
-saleRoute.get("/buy-course/course/:courseId", GetCheckoutPage);
+saleRoute.get("/get-checkout-page-details/:type/:id", GetCheckoutPage);
 saleRoute.post("/salespage/create-cashfree-order", SaleCreateCashfreeOrder);
 saleRoute.post("/salespage/verify-cashfree-payment", SaleVerifyCashfreeOrder);
 saleRoute.post("/salespage/create-razorpay-order", SaleCreateRazorpayOrder);

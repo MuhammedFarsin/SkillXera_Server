@@ -13,7 +13,7 @@ const PaymentSchema = new mongoose.Schema({
     refPath: "productType", // Dynamic reference based on productType
   },
   productType: {
-    type: String,
+    type: String,  
     required: true,
     enum: ["Course", "DigitalProduct"], // Explicit types
     default: "Course", // Backward compatibility

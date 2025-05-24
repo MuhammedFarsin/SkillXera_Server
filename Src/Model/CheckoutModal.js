@@ -53,9 +53,10 @@ checkoutPageSchema.index(
 );
 
 checkoutPageSchema.virtual("product", {
-  ref: function () {
-    return this.linkedTo.kind;
-  },
+ ref: function () {
+  return this.linkedTo.kind === 'course' ? 'Course' : 'DigitalProduct';
+},
+
   localField: "linkedTo.item",
   foreignField: "_id",
   justOne: true,
