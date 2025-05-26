@@ -35,10 +35,21 @@ const sendOtpEmail = async (toEmail, otp) => {
   }
 };
 
-const sendPaymentSuccessEmail = async (user, toEmail, courseDetails, paymentId, invoicePath) => {
-
+const sendPaymentSuccessEmail = async (
+  user,
+  toEmail,
+  courseDetails,
+  paymentId,
+  invoicePath
+) => {
   try {
     let additionalContent = "";
+    if (typeof toEmail !== "string") {
+      console.error("Invalid email format:", toEmail);
+      throw new Error("Invalid recipient email format");
+    }
+
+    toEmail = toEmail.replace(/^'+|'+$/g, "").trim();
 
     if (!user.password) {
       // Generate reset token
@@ -83,7 +94,5 @@ const sendPaymentSuccessEmail = async (user, toEmail, courseDetails, paymentId, 
     throw new Error("Failed to send payment success email");
   }
 };
-
-
 
 module.exports = { sendOtpEmail, sendPaymentSuccessEmail };

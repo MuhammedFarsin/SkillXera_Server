@@ -8,11 +8,7 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: false },
     refreshToken: { type: String },
     isAdmin: { type: Boolean, default: false },
-    enrolledCourses: {
-      type: [mongoose.Schema.Types.ObjectId],
-      ref: "Course",
-      default: [],
-    },
+    orders: [{ type: String }],
     passwordResetToken: { type: String, select: false },
     passwordResetExpires: { type: Date, select: false },
   },

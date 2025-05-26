@@ -78,9 +78,18 @@ const deleteCourse = async (req, res) => {
 
     // 2. Delete related pages
     await Promise.all([
-      SalesPage.deleteMany({ 'linkedTo.kind': 'Course', 'linkedTo.item': courseId }),
-      CheckoutPage.deleteMany({ 'linkedTo.kind': 'course', 'linkedTo.item': courseId }),
-      ThankYouPage.deleteMany({ 'linkedTo.kind': 'course', 'linkedTo.item': courseId })
+      SalesPage.deleteMany({
+        "linkedTo.kind": "Course",
+        "linkedTo.item": courseId,
+      }),
+      CheckoutPage.deleteMany({
+        "linkedTo.kind": "course",
+        "linkedTo.item": courseId,
+      }),
+      ThankYouPage.deleteMany({
+        "linkedTo.kind": "course",
+        "linkedTo.item": courseId,
+      }),
     ]);
 
     res.json({ message: "Course pages deleted successfully" });
@@ -548,47 +557,38 @@ const getModuleLecture = async (req, res) => {
 const getUserCourses = async (req, res) => {
   try {
     const { userId } = req.params;
-    // Find user
+    console.log(userId)
+    // 1. Get the user
     const user = await User.findById(userId);
-    if (!user) {
-      console.log("User not found");
-      return res.status(404).json({ message: "User not found." });
-    }
+    if (!user) return res.status(404).json({ message: "User not found." });
 
-    if (!user.orders.length) {
-      return res
-        .status(404)
-        .json({ message: "You haven’t purchased any courses yet." });
-    }
-
-    // Find successful purchases
+    // 2. Get all successful payments using user's order IDs
     const payments = await Purchase.find({
       orderId: { $in: user.orders },
       status: "Success",
+      productType: "Course"
     });
 
     if (!payments.length) {
-      return res
-        .status(404)
-        .json({ message: "No successful purchases found." });
+      return res.status(404).json({ message: "No purchased courses found." });
     }
 
+    // 3. Map course data from productSnapshot
     const courses = payments.map((payment) => ({
       orderId: payment.orderId,
-      course: {
-        ...payment.courseSnapshot,
-        images: payment.courseSnapshot?.images || [], // Ensure images is always an array
-        modules: payment.courseSnapshot?.modules || [], // Ensure modules is always an array
-      },
+      course: payment.productSnapshot,
       purchaseDate: payment.createdAt,
     }));
+ 
+
 
     return res.status(200).json({ courses });
   } catch (error) {
     console.error("Error fetching user courses:", error);
-    res.status(500).json({ message: "Error fetching user courses", error });
+    return res.status(500).json({ message: "Internal server error", error });
   }
 };
+
 
 const userCourse = async (req, res) => {
   try {
@@ -1435,13 +1435,15 @@ const GetEditCheckoutDetails = async (req, res) => {
 const UpdateCheckoutPage = async (req, res) => {
   try {
     const { type, id } = req.params;
-    
+
     const topHeading = req.body.topHeading;
     const subHeading = req.body.subHeading;
     const existingImage = req.body.existingImage;
-    const lines = req.body.lines ? 
-      (Array.isArray(req.body.lines) ? req.body.lines : [req.body.lines]) : 
-      [];
+    const lines = req.body.lines
+      ? Array.isArray(req.body.lines)
+        ? req.body.lines
+        : [req.body.lines]
+      : [];
 
     if (!topHeading || !subHeading) {
       return res.status(400).json({
@@ -1475,8 +1477,12 @@ const UpdateCheckoutPage = async (req, res) => {
       lines,
     };
 
-    if (req.files && req.files.checkoutImage && req.files.checkoutImage.length > 0) {
-     updateData.checkoutImage = req.files.checkoutImage[0].filename;
+    if (
+      req.files &&
+      req.files.checkoutImage &&
+      req.files.checkoutImage.length > 0
+    ) {
+      updateData.checkoutImage = req.files.checkoutImage[0].filename;
     } else if (existingImage && existingImage !== "undefined") {
       updateData.checkoutImage = existingImage;
     } else {

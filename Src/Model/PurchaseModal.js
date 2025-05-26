@@ -6,43 +6,49 @@ const PaymentSchema = new mongoose.Schema({
   email: { type: String, required: true },
   phone: { type: Number, required: true },
 
-  // Product Reference (Supports both courses and digital products)
+  // Product Information
   productId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true,
-    refPath: "productType", // Dynamic reference based on productType
+    refPath: "productType",
   },
   productType: {
     type: String,  
     required: true,
-    enum: ["Course", "DigitalProduct"], // Explicit types
-    default: "Course", // Backward compatibility
+    enum: ["Course", "DigitalProduct"],
+    default: "Course",
   },
 
   // Payment Details
   amount: { type: Number, required: true },
   orderId: { type: String, required: true },
-  status: {
-    type: String,
-    enum: ["Pending", "Success", "Failed"],
-    default: "Pending",
+  razorpay_payment_id: String,
+  razorpay_signature: String,
+  status: { 
+    type: String, 
+    enum: ["Pending", "Success", "Failed"], 
+    default: "Pending" 
   },
-  createdAt: { type: Date, default: Date.now },
   paymentMethod: {
     type: String,
     enum: ["Razorpay", "Cashfree"],
     required: true,
   },
+  failureReason: String,
+  isOrderBump: { type: Boolean, default: false },
+  parentOrder: String,
 
+  // Product Snapshot
   productSnapshot: {
     title: { type: String, required: true },
     description: String,
     images: [String],
     regularPrice: { type: Number, required: true },
     salesPrice: { type: Number, required: true },
-
     route: String,
     buyCourse: String,
+    
+    // Course-specific fields
     modules: {
       type: [
         {
@@ -58,14 +64,15 @@ const PaymentSchema = new mongoose.Schema({
           ],
         },
       ],
-      required: function () {
+      required: function() {
         return this.productType === "Course";
       },
     },
 
+    // Digital Product-specific fields
     fileUrl: {
       type: String,
-      required: function () {
+      required: function() {
         return this.productType === "DigitalProduct";
       },
     },
@@ -73,15 +80,21 @@ const PaymentSchema = new mongoose.Schema({
     contentType: {
       type: String,
       enum: ["file", "link"],
-      required: function () {
+      required: function() {
         return this.productType === "DigitalProduct";
       },
     },
   },
-});
 
+  // Timestamps
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+}, { timestamps: true });
+
+// Indexes
 PaymentSchema.index({ productId: 1, productType: 1 });
 PaymentSchema.index({ email: 1, status: 1 });
+PaymentSchema.index({ orderId: 1 }, { unique: true });
 
 const Payment = mongoose.model("Payment", PaymentSchema);
 module.exports = Payment;
