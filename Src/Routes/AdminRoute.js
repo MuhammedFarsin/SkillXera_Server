@@ -44,8 +44,16 @@ const {
   CheckCheckoutPageforCourse,
   CheckSalesPageforCourse,
   CheckThankoutPageforCourse,
-  UpdateCheckoutPage
+  UpdateCheckoutPage,
 } = require("../Controller/CourseController");
+
+const {
+  getPaymentSummary,
+  getFailedPayments,
+  reconcilePayments,
+  retryFailedPayment,
+  getPaymentDetails
+} = require("../Controller/PaymentAdminController");
 
 const {
   getContacts,
@@ -74,6 +82,7 @@ const {
 // Dashboard
 adminRoute.get("/dashboard", dashboard);
 // Get all courses...
+
 adminRoute.get(
   "/assets/get-courses",
   authenticateAccessToken,
@@ -452,6 +461,39 @@ adminRoute.post(
   authenticateAccessToken,
   isAdmin,
   resendAccessCouseLink
+);
+
+adminRoute.get(
+  "/payments/summary",
+  authenticateAccessToken,
+  isAdmin,
+  getPaymentSummary
+);
+
+// Payment management routes
+adminRoute.get(
+  "/payments/failed",
+  authenticateAccessToken,
+  isAdmin,
+  getFailedPayments
+);
+adminRoute.post(
+  "/payments/reconcile",
+  authenticateAccessToken,
+  isAdmin,
+  reconcilePayments
+);
+adminRoute.get(
+  "/payments/details/:orderId",
+  authenticateAccessToken,
+  isAdmin,
+  getPaymentDetails
+);
+adminRoute.post(
+  "/payments/retry/:paymentId",
+  authenticateAccessToken,
+  isAdmin,
+  retryFailedPayment
 );
 
 module.exports = adminRoute;

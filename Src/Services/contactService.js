@@ -14,66 +14,80 @@ const ensureTagExists = async (tagName) => {
 // Main exported function
 exports.updateContactWithPaymentStatus = async (email, status, userDetails = {}) => {
   try {
-    // Validate input
     if (!email || !status) throw new Error('Email and status are required');
 
-    // Initialize or reset tags array if needed
-    await Contact.updateOne(
-      { email, $or: [{ tags: { $exists: false } }, { tags: null }] },
-      { $set: { tags: [] } },
-      { upsert: true }
-    );
+    let contact = await Contact.findOne({ email });
+    
+    if (!contact) {
+      contact = await Contact.create({
+        email,
+        username: userDetails.username || '',
+        phone: userDetails.phone || null,
+        tags: [],
+        statusTag: status
+      });
+    }
 
-    // Prepare tags to remove
+    if (!contact.tags) {
+      contact.tags = [];
+      await contact.save();
+    }
+
     const tagsToRemove = [];
     let statusTag;
 
-    // Handle payment completion statuses (Success/Failed)
-    if (status === 'Success' || status === 'Failed') {
-      // 1. Remove opposite status tag
-      const oppositeStatus = status === 'Success' ? 'Failed' : 'Success';
-      const oppositeTag = await Tag.findOne({ name: oppositeStatus });
-      if (oppositeTag) tagsToRemove.push(oppositeTag._id);
+    // Handle payment statuses (Success/Failed/Reconciled)
+    if (status === 'Success' || status === 'Failed' || status === 'Reconciled') {
+      const oppositeStatuses = 
+        status === 'Success' ? ['Failed', 'Reconciled'] :
+        status === 'Failed' ? ['Success', 'Reconciled'] :
+        ['Success', 'Failed'];
+      
+      const oppositeTags = await Tag.find({ name: { $in: oppositeStatuses } });
+      if (oppositeTags.length > 0) {
+        tagsToRemove.push(...oppositeTags.map(tag => tag._id));
+      }
 
-      // 2. Always remove drop-off tag for completed payments
       const dropOffTag = await Tag.findOne({ name: 'drop-off' });
       if (dropOffTag) tagsToRemove.push(dropOffTag._id);
 
-      // 3. Get/create the current status tag
       statusTag = await ensureTagExists(status);
     } 
     // Handle drop-off status
     else if (status === 'drop-off') {
-      // Remove payment status tags (Success/Failed)
-      const successTag = await Tag.findOne({ name: 'Success' });
-      const failedTag = await Tag.findOne({ name: 'Failed' });
-      if (successTag) tagsToRemove.push(successTag._id);
-      if (failedTag) tagsToRemove.push(failedTag._id);
+      const paymentStatusTags = await Tag.find({ 
+        name: { $in: ['Success', 'Failed', 'Reconciled'] } 
+      });
+      if (paymentStatusTags.length > 0) {
+        tagsToRemove.push(...paymentStatusTags.map(tag => tag._id));
+      }
 
-      // Get/create drop-off tag
       statusTag = await ensureTagExists(status);
     }
 
     // Remove unwanted tags
     if (tagsToRemove.length > 0) {
       await Contact.updateOne(
-        { email },
+        { _id: contact._id },
         { $pull: { tags: { $in: tagsToRemove } } }
       );
     }
 
-    // Add new status tag and update contact details
-    const result = await Contact.findOneAndUpdate(
-      { email },
-      { 
-        $set: { 
-          statusTag: status,
-          ...(userDetails.username && { username: userDetails.username }),
-          ...(userDetails.phone && { phone: userDetails.phone })
-        },
-        $addToSet: { tags: statusTag._id }
-      },
-      { new: true, upsert: true }
+    // Update contact
+    const updateData = {
+      statusTag: status,
+      ...(userDetails.username && { username: userDetails.username }),
+      ...(userDetails.phone && { phone: userDetails.phone })
+    };
+
+    if (statusTag) {
+      updateData.$addToSet = { tags: statusTag._id };
+    }
+
+    const result = await Contact.findByIdAndUpdate(
+      contact._id,
+      updateData,
+      { new: true }
     );
 
     return result;

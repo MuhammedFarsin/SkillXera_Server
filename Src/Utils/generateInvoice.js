@@ -4,9 +4,8 @@ const path = require("path");
 
 const generateInvoice = (payment, courseDetails) => {
   return new Promise((resolve, reject) => {
-    const invoicesDir = path.join(__dirname, "invoices"); // Define invoices directory
+    const invoicesDir = path.join(__dirname, "invoices");
 
-    // ✅ Ensure the "invoices" folder exists
     if (!fs.existsSync(invoicesDir)) {
       fs.mkdirSync(invoicesDir, { recursive: true });
       console.log("✅ Created invoices folder:", invoicesDir);
