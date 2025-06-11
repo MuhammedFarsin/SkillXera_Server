@@ -42,7 +42,7 @@ userRoute.post("/reset-password", resetPassword);
 userRoute.post("/refresh-token", authenticateRefreshToken, refreshToken);
 
 userRoute.get("/user-orders/:userId", authenticateAccessToken, getUserCourses);
-userRoute.get("/learn/:courseId", authenticateAccessToken, userCourse);
+// userRoute.get("/learn/:courseId", authenticateAccessToken, userCourse);
 userRoute.get("/explore/:userId", authenticateAccessToken, showCourses);
 userRoute.get(
   "/get-course-buy-details/:courseId",

@@ -464,6 +464,8 @@ const getEditLecture = async (req, res) => {
     const lecture = module.lectures.id(lectureId);
     if (!lecture) return res.status(404).json({ message: "Lecture not found" });
 
+    console.log(lecture)
+
     res.status(200).json(lecture);
   } catch (error) {
     res
@@ -557,108 +559,106 @@ const getModuleLecture = async (req, res) => {
 const getUserCourses = async (req, res) => {
   try {
     const { userId } = req.params;
-    console.log(userId);
-    // 1. Get the user
+
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found." });
 
-    // 2. Get all successful payments using user's order IDs
     const payments = await Purchase.find({
       orderId: { $in: user.orders },
       status: "Success",
-      productType: "Course",
-    });
+    }).lean();
 
     if (!payments.length) {
-      return res.status(404).json({ message: "No purchased courses found." });
+      return res.status(404).json({ message: "No purchases found." });
     }
 
-    // 3. Map course data from productSnapshot
-    const courses = payments.map((payment) => ({
-      orderId: payment.orderId,
-      course: payment.productSnapshot,
-      purchaseDate: payment.createdAt,
-      Id: payment.productId,
-    }));
+    // Organize purchases by type
+    const result = {
+      courses: [],
+      digitalProducts: [],
+      orderBumps: []
+    };
 
-    return res.status(200).json({ courses });
+    payments.forEach((payment) => {
+      // Main product (course or digital product)
+      if (payment.productType === 'Course') {
+        result.courses.push({
+          orderId: payment.orderId,
+          product: payment.productSnapshot,
+          purchaseDate: payment.createdAt,
+          productId: payment.productId,
+          type: 'course'
+        });
+      } else if (payment.productType === 'DigitalProduct') {
+        result.digitalProducts.push({
+          orderId: payment.orderId,
+          product: payment.productSnapshot,
+          purchaseDate: payment.createdAt,
+          productId: payment.productId,
+          type: 'digitalProduct'
+        });
+      }
+
+      // Order bumps (can be for either type)
+      if (payment.orderBumps?.length > 0) {
+        payment.orderBumps.forEach(bump => {
+          result.orderBumps.push({
+            _id: bump._id,
+            orderId: payment.orderId,
+            title: bump.title,
+            description: bump.description || `Bonus resource for ${payment.productSnapshot.title}`,
+            amount: bump.amount,
+            fileUrl: bump.fileUrl,
+            externalUrl: bump.externalUrl,
+            contentType: bump.contentType,
+            purchaseDate: payment.createdAt,
+            parentProduct: {
+              title: payment.productSnapshot.title,
+              id: payment.productId,
+              type: payment.productType === 'Course' ? 'course' : 'digitalProduct'
+            }
+          });
+        });
+      }
+    });
+
+    return res.status(200).json(result);
   } catch (error) {
-    console.error("Error fetching user courses:", error);
+    console.error("Error fetching user purchases:", error);
     return res.status(500).json({ message: "Internal server error", error });
-  }
-};
-
-const userCourse = async (req, res) => {
-  try {
-    const { courseId } = req.params;
-    const userId = req.user._id;
-    console.log(req.body);
-    // 1. Find user with orders
-    const user = await User.findById(userId);
-    if (!user?.orders?.length) {
-      return res
-        .status(403)
-        .json({ message: "No purchase found for this user" });
-    }
-
-    // 2. Find payment record (not purchase)
-    const payment = await Purchase.findOne({
-      orderId: { $in: user.orders },
-      productType: "Course",
-    });
-
-    if (!payment) {
-      return res.status(403).json({ message: "No valid payment record found" });
-    }
-
-    // 3. Check course ID match
-    if (payment.productId.toString() !== courseId) {
-      return res.status(403).json({
-        message: "You have not purchased this course",
-      });
-    }
-
-    // 4. Return the course content
-    res.status(200).json({
-      ...payment.productSnapshot,
-      courseId: payment.productId, // Include for consistency
-    });
-  } catch (error) {
-    console.error("Error fetching course:", error);
-    res.status(500).json({ message: "Internal server error" });
   }
 };
 
 const showCourses = async (req, res) => {
   try {
-    const { userId } = req.params; // Assuming user ID is available from auth middleware
+    const { userId } = req.params;
+
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Fetch all purchased course IDs from user's orders
-    const userOrders = await Purchase.find({
+    const successfulOrders = await Purchase.find({
       orderId: { $in: user.orders },
       status: "Success",
     });
-    const purchasedCourseIds = userOrders.map((order) =>
-      order.courseId.toString()
-    );
 
-    // Fetch all courses that the user has NOT purchased
-    const courses = await Course.find({ _id: { $nin: purchasedCourseIds } });
+    const purchasedCourseIds = successfulOrders
+      .filter(order => order.productId)
+      .map(order => order.productId.toString()); // 🔁 Changed from courseId to productId
 
-    if (!courses || courses.length === 0) {
-      return res.status(200).json({ message: "No new courses available" });
-    }
+    const courses = await Course.find({
+      _id: { $nin: purchasedCourseIds },
+    });
 
     res.status(200).json({ courses });
   } catch (error) {
-    console.error("Error fetching courses:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    console.error("Error fetching courses:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
+
+
 const getBuyCourseDetails = async (req, res) => {
   try {
     const { courseId } = req.params;
@@ -1880,7 +1880,7 @@ module.exports = {
   EditLecture,
   getModuleLecture,
   getUserCourses,
-  userCourse,
+  // userCourse,
   showCourses,
   getBuyCourseDetails,
   createSalesPage,

@@ -1,13 +1,15 @@
-const Payment = require('../../Model/PurchaseModal');
-const FailedPayment = require('../../Model/FailedPaymentModal');
-const User = require('../../Model/UserModel');
-const Course = require('../../Model/CourseModel');
-const OrderBump = require('../../Model/OrderBumbModel');
+const Payment = require("../../Model/PurchaseModal");
+const FailedPayment = require("../../Model/FailedPaymentModal");
+const User = require("../../Model/UserModel");
+const Course = require("../../Model/CourseModel");
+const OrderBump = require("../../Model/OrderBumbModel");
 const { generateResetToken } = require("../../Config/ResetToken");
 const generateInvoice = require("../../Utils/generateInvoice");
-const { sendPaymentSuccessEmail } = require('../../utils/sendMail');
-const { trackPurchase } = require('../../Services/trackPurchase');
-const { updateContactWithPaymentStatus } = require('../../Services/contactService');
+const { sendPaymentSuccessEmail } = require("../../utils/sendMail");
+const { trackPurchase } = require("../../Services/trackPurchase");
+const {
+  updateContactWithPaymentStatus,
+} = require("../../Services/contactService");
 
 const handleCoursePayment = async ({
   razorpay_order_id,
@@ -19,7 +21,7 @@ const handleCoursePayment = async ({
   amount,
   orderBumps,
   payment,
-  res
+  res,
 }) => {
   try {
     // Validate required parameters
@@ -46,13 +48,13 @@ const handleCoursePayment = async ({
         await logFailedPayment({
           orderId: razorpay_order_id,
           productId: courseId,
-          productType: 'Course',
+          productType: "Course",
           amount,
           email,
           phone,
           username,
           reason: `User creation failed: ${userError.message}`,
-          context: 'user_creation'
+          context: "user_creation",
         });
         throw userError;
       }
@@ -64,17 +66,17 @@ const handleCoursePayment = async ({
       await logFailedPayment({
         orderId: razorpay_order_id,
         productId: courseId,
-        productType: 'Course',
+        productType: "Course",
         amount,
         email,
         phone,
         username,
-        reason: 'Course not found',
-        context: 'course_not_found'
+        reason: "Course not found",
+        context: "course_not_found",
       });
       return res.status(404).json({
         success: false,
-        message: 'Course not found',
+        message: "Course not found",
       });
     }
 
@@ -83,15 +85,15 @@ const handleCoursePayment = async ({
       email,
       productId: courseId,
       status: "Success",
-      productType: 'Course',
-      _id: { $ne: payment._id }
+      productType: "Course",
+      _id: { $ne: payment._id },
     });
 
     if (existingPayment) {
       return res.status(200).json({
         success: true,
         status: "already_paid",
-        message: 'You have already purchased this course',
+        message: "You have already purchased this course",
         payment: existingPayment,
       });
     }
@@ -105,23 +107,24 @@ const handleCoursePayment = async ({
         await logFailedPayment({
           orderId: razorpay_order_id,
           productId: courseId,
-          productType: 'Course',
+          productType: "Course",
           amount,
           email,
           phone,
           username,
           reason: `Order bump processing failed: ${bumpError.message}`,
-          context: 'order_bump_processing',
+          context: "order_bump_processing",
           paymentData: {
             orderBumps,
-            errorDetails: bumpError.stack
-          }
+            errorDetails: bumpError.stack,
+          },
         });
         throw bumpError;
       }
     }
 
     // Create course snapshot
+    // In handleCoursePayment function, update the courseSnapshot creation:
     const courseSnapshot = {
       title: course.title,
       description: course.description,
@@ -130,15 +133,18 @@ const handleCoursePayment = async ({
       buyCourse: course.buyCourse,
       regularPrice: course.regularPrice,
       salesPrice: course.salesPrice,
-      modules: course.modules?.map(module => ({
+      modules: course.modules?.map((module) => ({
         title: module.title,
-        lectures: module.lectures?.map(lecture => ({
+        lectures: module.lectures?.map((lecture) => ({
           title: lecture.title,
           description: lecture.description,
-          videoUrl: lecture.videoUrl,
+          embedCode: lecture.embedCode,
+          contentType: lecture.contentType,
           resources: lecture.resources,
           duration: lecture.duration,
+          _id: lecture._id,
         })),
+        _id: module._id,
       })),
     };
 
@@ -151,10 +157,10 @@ const handleCoursePayment = async ({
           razorpay_payment_id,
           amount: amount,
           orderBumps: processedBumps,
-          productType: 'Course',
+          productType: "Course",
           productSnapshot: courseSnapshot,
-          paidAt: new Date()
-        }
+          paidAt: new Date(),
+        },
       },
       { new: true }
     );
@@ -173,22 +179,30 @@ const handleCoursePayment = async ({
 
     // Post-payment actions in parallel
     await Promise.all([
-      updateContactWithPaymentStatus(user.email, 'Success', { username, phone }),
+      updateContactWithPaymentStatus(user.email, "Success", {
+        username,
+        phone,
+      }),
       (async () => {
         const invoicePath = await generateInvoice(updatedPayment, course);
-        await sendPaymentSuccessEmail(user, user.email, updatedPayment, course, invoicePath);
+        await sendPaymentSuccessEmail(
+          user,
+          user.email,
+          updatedPayment,
+          course,
+          invoicePath
+        );
       })(),
-      trackPurchase(updatedPayment, course, orderBumps)
+      trackPurchase(updatedPayment, course, orderBumps),
     ]);
 
     return res.status(200).json({
       success: true,
-      message: 'Course payment verified successfully',
+      message: "Course payment verified successfully",
       payment: updatedPayment,
       user,
       resetLink,
     });
-
   } catch (error) {
     console.error("Course payment processing error:", error);
 
@@ -196,20 +210,20 @@ const handleCoursePayment = async ({
       orderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id,
       productId: courseId,
-      productType: 'Course',
+      productType: "Course",
       amount,
       error: error,
-      context: error.context || 'payment_processing',
+      context: error.context || "payment_processing",
       paymentData: {
         originalPaymentId: payment?._id,
         orderBumps,
-        errorDetails: error.stack
+        errorDetails: error.stack,
       },
       customer: {
         email,
-        phone: phone || '',
-        username
-      }
+        phone: phone || "",
+        username,
+      },
     };
 
     await Promise.all([
@@ -219,22 +233,24 @@ const handleCoursePayment = async ({
           failureReason: error.message,
           errorDetails: {
             stack: error.stack,
-            context: error.context
-          }
-        }
+            context: error.context,
+          },
+        },
       }),
       logFailedPayment(failureData),
-      email ? updateContactWithPaymentStatus(email, "Failed", {
-        username,
-        phone
-      }) : Promise.resolve()
+      email
+        ? updateContactWithPaymentStatus(email, "Failed", {
+            username,
+            phone,
+          })
+        : Promise.resolve(),
     ]);
 
     return res.status(500).json({
       success: false,
       message: "An error occurred during course payment processing",
       error: error.message,
-      referenceId: razorpay_order_id
+      referenceId: razorpay_order_id,
     });
   }
 };
@@ -261,7 +277,7 @@ async function processCourseOrderBumps(orderBumps) {
       amount: bump.bumpPrice,
       fileUrl: bump.bumpProduct.fileUrl || undefined,
       externalUrl: bump.bumpProduct.externalUrl || undefined,
-      contentType: bump.bumpProduct.fileUrl ? 'file' : 'link'
+      contentType: bump.bumpProduct.fileUrl ? "file" : "link",
     });
   }
 
@@ -272,25 +288,27 @@ async function processCourseOrderBumps(orderBumps) {
 const logFailedPayment = async (data) => {
   try {
     const validContexts = [
-      'payment_processing',
-      'order_verification',
-      'user_creation',
-      'email_sending',
-      'order_bump',
-      'course_not_found',
-      'database_error',
-      'other'
+      "payment_processing",
+      "order_verification",
+      "user_creation",
+      "email_sending",
+      "order_bump",
+      "course_not_found",
+      "database_error",
+      "other",
     ];
 
-    const validatedContext = validContexts.includes(data.context) ? data.context : 'other';
+    const validatedContext = validContexts.includes(data.context)
+      ? data.context
+      : "other";
 
     const failedPayment = {
-      orderId: data.orderId || 'unknown',
-      razorpayPaymentId: data.razorpayPaymentId || '',
+      orderId: data.orderId || "unknown",
+      razorpayPaymentId: data.razorpayPaymentId || "",
       productId: data.productId || null,
-      productType: 'Course', // Force to Course
+      productType: "Course", // Force to Course
       amount: data.amount || 0,
-      error: data.error?.message || String(data.error || 'Unknown error'),
+      error: data.error?.message || String(data.error || "Unknown error"),
       stackTrace: data.error?.stack || new Error().stack,
       context: validatedContext,
       paymentData: data.paymentData || {},
@@ -298,8 +316,8 @@ const logFailedPayment = async (data) => {
         email: data.customer?.email || data.email,
         phone: data.customer?.phone || data.phone,
         username: data.customer?.username || data.username,
-        userId: data.customer?.userId || null
-      }
+        userId: data.customer?.userId || null,
+      },
     };
 
     await FailedPayment.create(failedPayment);
@@ -311,5 +329,5 @@ const logFailedPayment = async (data) => {
 
 module.exports = {
   handleCoursePayment,
-  logFailedPayment
+  logFailedPayment,
 };

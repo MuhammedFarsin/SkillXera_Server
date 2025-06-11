@@ -78,6 +78,8 @@ const PaymentSchema = new mongoose.Schema(
             {
               title: String,
               description: String,
+              embedCode: String, // ✅ Required
+              contentType: String,
               videoUrl: String,
               resources: [String],
               duration: Number,

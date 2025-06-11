@@ -86,7 +86,7 @@ const dashboard = async (req, res) => {
       .select("username email phone createdAt");
 
     const totalRevenueData = await Payment.aggregate([
-       { $match: { status: { $in: ["Success", "Reconciled"] }, ...dateFilter } },
+      { $match: { status: { $in: ["Success", "Reconciled"] }, ...dateFilter } },
       {
         $group: {
           _id: null,
@@ -1303,7 +1303,6 @@ const SaleCreateRazorpayOrder = async (req, res) => {
       });
     }
 
-    // Prepare product snapshot
     const productSnapshot = {
       title: product.title || product.name,
       description: product.description,
@@ -1311,7 +1310,6 @@ const SaleCreateRazorpayOrder = async (req, res) => {
       salesPrice: product.salesPrice || product.price,
     };
 
-    // Add type-specific fields
     if (type === "course") {
       productSnapshot.modules = product.modules || [];
       productSnapshot.route = product.route;
@@ -1363,7 +1361,13 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
     } = req.body;
 
     // Basic validation
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !productId || !type) {
+    if (
+      !razorpay_order_id ||
+      !razorpay_payment_id ||
+      !razorpay_signature ||
+      !productId ||
+      !type
+    ) {
       return res.status(400).json({
         success: false,
         message: "Missing required payment details",
@@ -1386,12 +1390,12 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
       // Update payment status first
       await Payment.updateOne(
         { orderId: razorpay_order_id },
-        { 
-          $set: { 
+        {
+          $set: {
             status: "Failed",
             failureReason: "Signature verification failed",
-            updatedAt: new Date()
-          } 
+            updatedAt: new Date(),
+          },
         }
       );
 
@@ -1406,8 +1410,8 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
         customer: {
           email: paymentRecord.email,
           phone: paymentRecord.phone,
-          username: paymentRecord.username
-        }
+          username: paymentRecord.username,
+        },
       });
 
       return res.status(400).json({
@@ -1425,12 +1429,12 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
     if (razorpayOrder.status !== "paid") {
       await Payment.updateOne(
         { orderId: razorpay_order_id },
-        { 
-          $set: { 
+        {
+          $set: {
             status: "Failed",
             failureReason: "Payment not completed",
-            updatedAt: new Date()
-          } 
+            updatedAt: new Date(),
+          },
         }
       );
 
@@ -1444,8 +1448,8 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
         customer: {
           email: paymentRecord.email,
           phone: paymentRecord.phone,
-          username: paymentRecord.username
-        }
+          username: paymentRecord.username,
+        },
       });
 
       return res.status(400).json({
@@ -1458,12 +1462,12 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
     if (razorpayOrder.amount / 100 !== paymentRecord.amount) {
       await Payment.updateOne(
         { orderId: razorpay_order_id },
-        { 
-          $set: { 
+        {
+          $set: {
             status: "Failed",
             failureReason: "Amount mismatch",
-            updatedAt: new Date()
-          } 
+            updatedAt: new Date(),
+          },
         }
       );
 
@@ -1472,13 +1476,15 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
         productId,
         productType: paymentRecord.productType,
         amount: paymentRecord.amount,
-        reason: `Amount mismatch (expected ${paymentRecord.amount}, got ${razorpayOrder.amount/100})`,
+        reason: `Amount mismatch (expected ${paymentRecord.amount}, got ${
+          razorpayOrder.amount / 100
+        })`,
         context: "amount_verification",
         customer: {
           email: paymentRecord.email,
           phone: paymentRecord.phone,
-          username: paymentRecord.username
-        }
+          username: paymentRecord.username,
+        },
       });
 
       return res.status(400).json({
@@ -1496,13 +1502,12 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
           razorpay_payment_id,
           razorpay_signature,
           paidAt: new Date(),
-          updatedAt: new Date()
+          updatedAt: new Date(),
         },
       },
       { new: true }
     );
 
-    // 7. Handle successful payment based on type
     if (paymentRecord.productType === "Course") {
       return await coursePaymentHandler.handleCoursePayment({
         razorpay_order_id,
@@ -1514,7 +1519,7 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
         amount: razorpayOrder.amount / 100,
         orderBumps,
         payment: updatedPayment,
-        res
+        res,
       });
     } else {
       return await handleDigitalProductPayment({
@@ -1527,39 +1532,42 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
         amount: razorpayOrder.amount / 100,
         orderBumps,
         payment: updatedPayment,
-        res
+        res,
       });
     }
-
   } catch (error) {
     console.error("Payment verification error:", error);
-    
+
     try {
       await coursePaymentHandler.logFailedPayment({
         orderId: req.body.razorpay_order_id,
         productId: req.body.productId,
-        productType: paymentRecord?.productType || (req.body.type === "course" ? "Course" : "DigitalProduct"),
+        productType:
+          paymentRecord?.productType ||
+          (req.body.type === "course" ? "Course" : "DigitalProduct"),
         amount: paymentRecord?.amount || 0,
         reason: error.message,
         context: "payment_verification",
-        customer: paymentRecord ? {
-          email: paymentRecord.email,
-          phone: paymentRecord.phone,
-          username: paymentRecord.username
-        } : null,
-        errorDetails: error.stack
+        customer: paymentRecord
+          ? {
+              email: paymentRecord.email,
+              phone: paymentRecord.phone,
+              username: paymentRecord.username,
+            }
+          : null,
+        errorDetails: error.stack,
       });
 
       if (paymentRecord) {
         await Payment.updateOne(
           { orderId: req.body.razorpay_order_id },
-          { 
-            $set: { 
+          {
+            $set: {
               status: "Failed",
               failureReason: error.message,
               errorDetails: error.stack,
-              updatedAt: new Date()
-            } 
+              updatedAt: new Date(),
+            },
           }
         );
       }
@@ -1570,7 +1578,7 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Payment processing failed",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -1671,36 +1679,36 @@ const getThankyouPage = async (req, res) => {
     const { id, type } = req.params;
 
     // Validate type
-    if (!['course', 'digital-product'].includes(type)) {
-      return res.status(400).json({ 
+    if (!["course", "digital-product"].includes(type)) {
+      return res.status(400).json({
         success: false,
-        error: "Invalid product type. Must be 'course' or 'digital-product'" 
+        error: "Invalid product type. Must be 'course' or 'digital-product'",
       });
     }
 
     // Find thank you page linked to this product
     const thankyouPageDetails = await ThankYouPage.findOne({
-      'linkedTo.kind': type,
-      'linkedTo.item': id
-    })
+      "linkedTo.kind": type,
+      "linkedTo.item": id,
+    });
 
     if (!thankyouPageDetails) {
       console.log(`No thank you page found for ${type} with ID: ${id}`);
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: "Thank you page not found for this product" 
+        error: "Thank you page not found for this product",
       });
     }
 
     res.status(200).json({
       success: true,
-      data: thankyouPageDetails
+      data: thankyouPageDetails,
     });
   } catch (error) {
     console.error("Error fetching thank you page details:", error);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: "Internal server error" 
+      error: "Internal server error",
     });
   }
 };
@@ -1719,5 +1727,5 @@ module.exports = {
   SaleCreateRazorpayOrder,
   SaleVerifyRazorpayPayment,
   GetCheckoutPage,
-  getThankyouPage
+  getThankyouPage,
 };
