@@ -12,22 +12,30 @@ const {
 } = require("../../Services/contactService");
 
 const handleCoursePayment = async ({
-  razorpay_order_id,
-  razorpay_payment_id,
-  courseId,
+  order_id, // Generic parameter name (works for both Razorpay and Cashfree)
+  payment_id, // Generic parameter name
+  gateway, // 'razorpay' or 'cashfree'
+  productId,
   username,
   email,
   phone,
   amount,
   orderBumps,
-  payment,
+  payment, // The payment document
   res,
 }) => {
   try {
+
+     console.log('this is orderid',order_id)
+    console.log('this is productId',productId)
+    console.log('this is the email',email)
+    console.log('this is payment',payment)
     // Validate required parameters
-    if (!razorpay_order_id || !courseId || !email || !payment) {
+    if (!order_id || !productId || !email || !payment) {
       throw new Error("Missing required payment parameters");
     }
+
+   
 
     // Find or create user
     let user = await User.findOne({ email });
@@ -46,8 +54,8 @@ const handleCoursePayment = async ({
         isNewUser = true;
       } catch (userError) {
         await logFailedPayment({
-          orderId: razorpay_order_id,
-          productId: courseId,
+          orderId: order_id,
+          productId: productId,
           productType: "Course",
           amount,
           email,
@@ -55,17 +63,18 @@ const handleCoursePayment = async ({
           username,
           reason: `User creation failed: ${userError.message}`,
           context: "user_creation",
+          gateway,
         });
         throw userError;
       }
     }
 
     // Get course details
-    const course = await Course.findById(courseId);
+    const course = await Course.findById(productId);
     if (!course) {
       await logFailedPayment({
-        orderId: razorpay_order_id,
-        productId: courseId,
+        orderId: order_id,
+        productId: productId,
         productType: "Course",
         amount,
         email,
@@ -73,6 +82,7 @@ const handleCoursePayment = async ({
         username,
         reason: "Course not found",
         context: "course_not_found",
+        gateway,
       });
       return res.status(404).json({
         success: false,
@@ -83,7 +93,7 @@ const handleCoursePayment = async ({
     // Check if already paid
     const existingPayment = await Payment.findOne({
       email,
-      productId: courseId,
+      productId: productId,
       status: "Success",
       productType: "Course",
       _id: { $ne: payment._id },
@@ -105,8 +115,8 @@ const handleCoursePayment = async ({
         processedBumps = await processCourseOrderBumps(orderBumps);
       } catch (bumpError) {
         await logFailedPayment({
-          orderId: razorpay_order_id,
-          productId: courseId,
+          orderId: order_id,
+          productId: productId,
           productType: "Course",
           amount,
           email,
@@ -118,13 +128,13 @@ const handleCoursePayment = async ({
             orderBumps,
             errorDetails: bumpError.stack,
           },
+          gateway,
         });
         throw bumpError;
       }
     }
 
     // Create course snapshot
-    // In handleCoursePayment function, update the courseSnapshot creation:
     const courseSnapshot = {
       title: course.title,
       description: course.description,
@@ -148,26 +158,34 @@ const handleCoursePayment = async ({
       })),
     };
 
+    // Gateway-specific payment details
+    const paymentUpdate = {
+      status: "Success",
+      amount: amount,
+      orderBumps: processedBumps,
+      productType: "Course",
+      productSnapshot: courseSnapshot,
+      paidAt: new Date(),
+    };
+
+    if (gateway === 'razorpay') {
+      paymentUpdate.razorpay_payment_id = payment_id;
+      paymentUpdate.razorpay_order_id = order_id;
+    } else if (gateway === 'cashfree') {
+      paymentUpdate.cf_payment_id = payment_id;
+      paymentUpdate.cf_order_id = order_id;
+    }
+
     // Update payment record
     const updatedPayment = await Payment.findByIdAndUpdate(
       payment._id,
-      {
-        $set: {
-          status: "Success",
-          razorpay_payment_id,
-          amount: amount,
-          orderBumps: processedBumps,
-          productType: "Course",
-          productSnapshot: courseSnapshot,
-          paidAt: new Date(),
-        },
-      },
+      { $set: paymentUpdate },
       { new: true }
     );
 
     // Enroll user
-    if (!user.orders.includes(razorpay_order_id)) {
-      user.orders.push(razorpay_order_id);
+    if (!user.orders.includes(order_id)) {
+      user.orders.push(order_id);
       await user.save();
     }
 
@@ -207,9 +225,10 @@ const handleCoursePayment = async ({
     console.error("Course payment processing error:", error);
 
     const failureData = {
-      orderId: razorpay_order_id,
-      razorpayPaymentId: razorpay_payment_id,
-      productId: courseId,
+      orderId: order_id,
+      paymentId: payment_id,
+      gateway,
+      productId: productId,
       productType: "Course",
       amount,
       error: error,
@@ -250,7 +269,7 @@ const handleCoursePayment = async ({
       success: false,
       message: "An error occurred during course payment processing",
       error: error.message,
-      referenceId: razorpay_order_id,
+      referenceId: order_id,
     });
   }
 };

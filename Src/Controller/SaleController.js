@@ -8,6 +8,7 @@ const { emitNewLead } = require("../socket");
 const Lead = require("../Model/LeadModal");
 const User = require("../Model/UserModel");
 const Tag = require("../Model/TagModel");
+const DigitalProduct = require("../Model/DigitalProductModal");
 const dotenv = require("dotenv");
 const crypto = require("crypto");
 const axios = require("axios");
@@ -31,7 +32,7 @@ if (!process.env.CASHFREE_CLIENT_ID || !process.env.CASHFREE_CLIENT_SECRET) {
   process.exit(1);
 }
 
-const CASHFREE_BASE_URL = process.env.CASHFREE_BASE_URL; // Sandbox URL
+const CASHFREE_BASE_URL = process.env.CASHFREE_BASE_URL;
 
 const dashboard = async (req, res) => {
   try {
@@ -475,36 +476,44 @@ const verifyCashfreeOrder = async (req, res) => {
 };
 const SaleCreateCashfreeOrder = async (req, res) => {
   try {
-    const { amount, currency, productId, productType, customer_details } =
+    const { amount, currency, productId, type, customer_details, orderBumps } =
       req.body;
-
-    // Validate request parameters
-    if (
-      !amount ||
-      !currency ||
-      !productId ||
-      !customer_details ||
-      !["Course", "DigitalProduct"].includes(productType)
-    ) {
-      return res.status(400).json({ error: "Invalid request parameters" });
-    }
-
     const {
       customer_name: username,
       customer_email: email,
       customer_phone: phone,
-    } = customer_details;
+    } = customer_details || {};
+    if (
+      !amount ||
+      !currency ||
+      !productId ||
+      !username ||
+      !email ||
+      !phone ||
+      !["course", "digitalProduct"].includes(type)
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields",
+      });
+    }
 
-    // Check if lead exists (now supports both product types)
-    let lead = await Lead.findOne({ email, productId, productType });
+    if (amount < 100) {
+      return res.status(400).json({
+        success: false,
+        error: "Amount must be at least ₹1",
+      });
+    }
 
+    // Handle lead creation
+    let lead = await Lead.findOne({ email, productId, type });
     if (!lead) {
       lead = await Lead.create({
         username,
         email,
         phone,
         productId,
-        productType,
+        type,
       });
       emitNewLead({
         _id: lead._id,
@@ -512,49 +521,46 @@ const SaleCreateCashfreeOrder = async (req, res) => {
         email,
         phone,
         productId,
-        productType,
+        type,
         createdAt: lead.createdAt,
       });
     }
 
-    // Handle contact creation
-    let dropOffTag = await Tag.findOne({ name: "drop-off" });
-    if (!dropOffTag) {
-      dropOffTag = await Tag.create({ name: "drop-off" });
-    }
+    // Update contact system
+    await updateContactWithPaymentStatus(email, "drop-off", {
+      username,
+      phone,
+    });
 
-    let contact = await Contact.findOne({ email });
-    if (!contact) {
-      contact = await Contact.create({
-        username,
-        email,
-        phone,
-        statusTag: "drop-off",
-        tags: [dropOffTag._id],
-      });
-    }
+    // Generate unique order ID
+    const orderId = `CF_ORDER_${Date.now()}_${Math.floor(
+      Math.random() * 1000
+    )}`;
 
-    // Generate order ID
-    const generatedOrderId = `ORDER_${Date.now()}`;
-
-    // Call Cashfree API
+    // Create Cashfree order
     const response = await axios.post(
-      `${CASHFREE_BASE_URL}`,
+      CASHFREE_BASE_URL,
       {
         order_amount: amount,
         order_currency: currency,
-        order_id: generatedOrderId,
-        productId,
-        productType, // Include product type in Cashfree payload
+        order_id: orderId,
         customer_details: {
-          customer_id: `CF_${Date.now()}`,
+          customer_id: `CF_CUST_${Date.now()}`,
           customer_name: username,
           customer_email: email,
           customer_phone: phone,
         },
         order_meta: {
-          return_url: `${process.env.FRONTEND_URL}/sale/payment-success?order_id=${generatedOrderId}&productId=${productId}&productType=${productType}&email=${email}&gateway=cashfree`,
+           return_url: `${req.body.return_url}`
         },
+        order_note: JSON.stringify({
+          username,
+          email,
+          phone,
+          productId,
+          type,
+          orderBumps: orderBumps || [],
+        }),
       },
       {
         headers: {
@@ -563,265 +569,324 @@ const SaleCreateCashfreeOrder = async (req, res) => {
           "X-Client-Secret": process.env.CASHFREE_CLIENT_SECRET,
           "x-api-version": "2022-09-01",
         },
+        timeout: 10000,
       }
     );
 
-    res.json({
-      payment_session_id: response.data.payment_session_id,
-      cf_order_id: response.data.order_id,
+    if (!response.data || !response.data.payment_session_id) {
+      return res.status(500).json({
+        success: false,
+        error: "Failed to create Cashfree order",
+      });
+    }
+
+    // Get product details
+    const ProductModel = type === "course" ? Course : DigitalProduct;
+    const product = await ProductModel.findById(productId).lean();
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: "Product not found",
+      });
+    }
+
+    const productSnapshot = {
+      title: product.title || product.name,
+      description: product.description,
+      regularPrice: product.regularPrice || product.price,
+      salesPrice: product.salesPrice || product.price,
+    };
+
+    if (type === "course") {
+      productSnapshot.modules = product.modules || [];
+      productSnapshot.route = product.route;
+      productSnapshot.buyCourse = product.buyCourse;
+      productSnapshot.images = product.images || [];
+    } else {
+      productSnapshot.contentType = product.fileUrl ? "file" : "link";
+      productSnapshot.fileUrl = product.fileUrl || undefined;
+      productSnapshot.externalUrl = product.externalUrl || undefined;
+    }
+
+    await Payment.create({
+      username,
+      email,
+      phone: Number(phone),
+      amount,
+      orderId,
       productId,
-      productType,
+      type,
+      paymentMethod: "Cashfree",
+      status: "Pending",
+      productSnapshot,
+      metadata: {
+        cf_session_id: response.data.payment_session_id,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        id: response.data.order_id,
+        payment_session_id: response.data.payment_session_id,
+        amount: response.data.order_amount,
+        currency: response.data.order_currency,
+      },
     });
   } catch (error) {
-    console.error("Cashfree API Error:", error.response?.data || error);
+    console.error("Cashfree order creation error:", {
+      message: error.message,
+      response: error.response?.data,
+      stack: error.stack,
+    });
+
     res.status(500).json({
-      error: "Payment initiation failed",
-      details: error.message,
+      success: false,
+      error: error.message || "Internal server error",
+      publicMessage: "Payment initiation failed. Please try again.",
     });
   }
 };
 
 const SaleVerifyCashfreeOrder = async (req, res) => {
+  let paymentRecord;
   try {
-    const { order_id, productId, productType, email } = req.body;
+    const { order_id, productId, type } = req.body;
+    console.log(req.body);
 
-    if (!order_id || !["Course", "DigitalProduct"].includes(productType)) {
-      return res.status(400).json({ message: "Invalid request parameters" });
-    }
-
-    const existingPayment = await Payment.findOne({
-      email,
-      productId,
-      productType,
-      status: "Success",
-    });
-
-    if (existingPayment) {
-      return res.status(201).json({
-        status: "already_paid",
-        message: "You have already purchased this product.",
-        payment: existingPayment,
+    // Basic validation
+    if (
+      !order_id ||
+      !productId ||
+      !["course", "digitalProduct"].includes(type)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required payment details",
       });
     }
 
-    const response = await axios.get(
-      `https://sandbox.cashfree.com/pg/orders/${order_id}`,
-      {
-        headers: {
-          accept: "application/json",
-          "x-client-id": process.env.CASHFREE_CLIENT_ID,
-          "x-client-secret": process.env.CASHFREE_CLIENT_SECRET,
-          "x-api-version": "2022-09-01",
-        },
-      }
-    );
+    paymentRecord = await Payment.findOne({ orderId: order_id });
+    if (!paymentRecord) {
+      throw new Error("Payment record not found in database");
+    }
+
+    const response = await axios.get(`${CASHFREE_BASE_URL}/${order_id}`, {
+      headers: {
+        accept: "application/json",
+        "x-client-id": process.env.CASHFREE_CLIENT_ID,
+        "x-client-secret": process.env.CASHFREE_CLIENT_SECRET,
+        "x-api-version": "2022-09-01",
+      },
+      timeout: 10000,
+    });
 
     const orderData = response.data;
     const paymentStatus = orderData?.order_status;
     const isPaymentSuccess = paymentStatus === "PAID";
-    const { order_amount, customer_details, created_at } = orderData;
-    const { customer_name, customer_email, customer_phone } = customer_details;
 
-    let finalProductId = productId;
-    let finalProductType = productType;
-
-    if (!finalProductId) {
-      const existingPayment = await Payment.findOne({ email: customer_email });
-      if (existingPayment) {
-        finalProductId = existingPayment.productId;
-        finalProductType = existingPayment.productType;
-      }
-    }
-
-    if (!finalCourseId) {
-      return res.status(404).json({
-        message: "Course ID could not be determined",
-        status: "failed",
-      });
-    }
-
-    const courseDetails = await Course.findById(finalCourseId);
-    if (!courseDetails) {
-      return res
-        .status(404)
-        .json({ message: "Course not found", status: "failed" });
-    }
-    let user = await User.findOne({ email: customer_email });
-
-    let resetLink = null;
-    if (!user) {
-      user = new User({
-        username: customer_name,
-        email: customer_email,
-        phone: customer_phone,
-        orders: isPaymentSuccess ? [order_id] : [],
-      });
-
-      await user.save();
-    } else {
-      if (isPaymentSuccess && !user.orders.includes(order_id)) {
-        user.orders.push(order_id);
-        await user.save();
-      }
-    }
-
-    if (!user.password) {
-      const resetToken = await generateResetToken(user);
-      if (resetToken) {
-        resetLink = `${process.env.FRONTEND_URL}/set-password?token=${resetToken}&email=${customer_email}`;
-        await user.save();
-      }
-    }
-
-    // ✅ Save payment details
-    const paymentData = {
-      username: customer_name,
-      email: customer_email,
-      phone: customer_phone,
-      courseId: finalCourseId,
-      amount: order_amount,
-      orderId: order_id,
-      status: isPaymentSuccess ? "Success" : "Failed",
-      createdAt: created_at,
-      paymentMethod: "Cashfree",
-      courseSnapshot: {
-        courseId: courseDetails._id,
-        title: courseDetails.title,
-        description: courseDetails.description,
-        images: courseDetails.images,
-        route: courseDetails.route,
-        buyCourse: courseDetails.buyCourse,
-        regularPrice: courseDetails.regularPrice,
-        salesPrice: courseDetails.salesPrice,
-        modules: courseDetails.modules.map((module) => ({
-          title: module.title,
-          lectures: module.lectures.map((lecture) => ({
-            title: lecture.title,
-            description: lecture.description,
-            videoUrl: lecture.videoUrl,
-            resources: lecture.resources,
-            duration: lecture.duration,
-          })),
-        })),
-      },
-    };
-
-    const payment = new Payment(paymentData);
-    await payment.save();
-
-    // ✅ Update Contact status and tags
-    const contact = await Contact.findOne({ email: customer_email });
-
-    if (contact) {
-      contact.statusTag = isPaymentSuccess ? "Success" : "Failed";
-
-      // ✅ Ensure tags array exists
-      if (!Array.isArray(contact.tags)) {
-        contact.tags = [];
-      }
-
-      // ✅ Fetch or Create required tags
-      let failedTag = await Tag.findOne({ name: "Failed" });
-      if (!failedTag) {
-        failedTag = await Tag.create({ name: "Failed" });
-      }
-
-      let successTag = await Tag.findOne({ name: "Success" });
-      if (!successTag) {
-        successTag = await Tag.create({ name: "Success" });
-      }
-
-      let dropOffTag = await Tag.findOne({ name: "drop-off" });
-
-      // ✅ Remove "Drop-off" tag if it exists
-      if (dropOffTag) {
-        contact.tags = contact.tags.filter(
-          (tag) => tag.toString() !== dropOffTag._id.toString()
-        );
-      }
-
-      if (isPaymentSuccess) {
-        // ✅ Remove "Failed" tag and add "Success"
-        contact.tags = contact.tags.filter(
-          (tag) => tag.toString() !== failedTag._id.toString()
-        );
-
-        if (!contact.tags.includes(successTag._id.toString())) {
-          contact.tags.push(successTag._id);
-        }
-      } else {
-        // ✅ Remove "Success" tag and add "Failed"
-        contact.tags = contact.tags.filter(
-          (tag) => tag.toString() !== successTag._id.toString()
-        );
-
-        if (!contact.tags.includes(failedTag._id.toString())) {
-          contact.tags.push(failedTag._id);
-        }
-      }
-
-      await contact.save();
-    }
-    const invoicePath = await generateInvoice(payment, courseDetails);
-
-    // Now send the email
-    if (isPaymentSuccess) {
-      await sendPaymentSuccessEmail(
-        user,
-        customer_email,
-        courseDetails,
-        order_id,
-        invoicePath
-      );
-
-      // ✅ Send Facebook Pixel Purchase Event
-      const fbPixelData = {
-        event_name: "Purchase",
-        event_time: Math.floor(Date.now() / 1000),
-        event_source_url: `${process.env.FRONTEND_URL}/payment-success`,
-        user_data: {
-          em: [hash(customer_email)],
-          ph: [hash(customer_phone)],
-        },
-        custom_data: {
-          value: courseDetails.salesPrice,
-          currency: "INR",
-          order_id: order_id,
-          content_name: courseDetails.title,
-          content_ids: [finalCourseId],
-          content_type: "product",
-        },
-        action_source: "website",
-      };
-
-      const fbResponse = await axios.post(
-        `https://graph.facebook.com/v18.0/${process.env.FB_PIXEL_ID}/events?access_token=${process.env.FB_ACCESS_TOKEN}`,
-        { data: [fbPixelData] }
-      );
-    }
-
-    return res.status(200).json({
-      message: isPaymentSuccess
-        ? "Payment verified, course details sent, and event tracked"
-        : "Payment verification failed",
-      status: isPaymentSuccess ? "success" : "failed",
-      payment,
-      user,
-      resetLink,
+      console.log('Cashfree order data:', {
+      order_amount: orderData.order_amount,
+      order_status: orderData.order_status,
+      order_currency: orderData.order_currency
     });
-  } catch (error) {
-    console.error(
-      "Cashfree Payment Verification Error:",
-      error.response?.data || error.message || error
+
+    // 3. Verify payment status
+    if (!isPaymentSuccess) {
+      await Payment.updateOne(
+        { orderId: order_id },
+        {
+          $set: {
+            status: "Failed",
+            failureReason: `Payment not completed (status: ${paymentStatus})`,
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      await coursePaymentHandler.logFailedPayment({
+        orderId: order_id,
+        productId,
+        productType: paymentRecord.type,
+        amount: paymentRecord.amount,
+        reason: `Payment not completed (status: ${paymentStatus})`,
+        context: "payment_status_check",
+        customer: {
+          email: paymentRecord.email,
+          phone: paymentRecord.phone,
+          username: paymentRecord.username,
+        },
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: `Payment not completed (status: ${paymentStatus})`,
+      });
+    }
+
+    // 4. Verify amount matches
+    if (orderData.order_amount !== paymentRecord.amount) {
+      await Payment.updateOne(
+        { orderId: order_id },
+        {
+          $set: {
+            status: "Failed",
+            failureReason: `Amount mismatch (expected ${
+              paymentRecord.amount
+            }, got ${orderData.order_amount / 100})`,
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      await coursePaymentHandler.logFailedPayment({
+        orderId: order_id,
+        productId,
+        productType: paymentRecord.type,
+        amount: paymentRecord.amount,
+        reason: `Amount mismatch (expected ${paymentRecord.amount}, got ${
+          orderData.order_amount
+        })`,
+        context: "amount_verification",
+        customer: {
+          email: paymentRecord.email,
+          phone: paymentRecord.phone,
+          username: paymentRecord.username,
+        },
+      });
+
+      return res.status(400).json({
+        success: false,
+        message: "Payment amount mismatch",
+      });
+    }
+
+    // 5. Parse order notes
+    let notes = {};
+    try {
+      if (orderData.order_note) {
+        let jsonStr = orderData.order_note;
+        if (jsonStr.startsWith('"') && jsonStr.endsWith('"')) {
+          jsonStr = jsonStr.slice(1, -1);
+        }
+        const decodedNotes = jsonStr
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'");
+        notes = JSON.parse(decodedNotes);
+      }
+    } catch (e) {
+      console.error("Failed to parse order notes:", {
+        originalNote: orderData.order_note,
+        error: e.message,
+      });
+    }
+    const orderBumps = notes.orderBumps || [];
+
+    // 6. Update payment record
+    const updatedPayment = await Payment.findOneAndUpdate(
+      { orderId: order_id },
+      {
+        $set: {
+          status: "Success",
+          paidAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            ...paymentRecord.metadata,
+            cf_payment_status: paymentStatus,
+            cf_transaction_id: orderData.cf_payment_id,
+          },
+        },
+      },
+      { new: true }
     );
-    return res.status(500).json({ message: "Internal Server Error" });
+
+    // 7. Handle fulfillment - IMPORTANT: Return the promise chain
+    if (paymentRecord.productType === "Course") {
+      return await coursePaymentHandler.handleCoursePayment({
+        order_id,
+        payment_id: orderData.cf_payment_id,
+        gateway: "cashfree",
+        productId,
+        username: notes.username || paymentRecord.username,
+        email: notes.email || paymentRecord.email,
+        phone: notes.phone || paymentRecord.phone,
+        amount: paymentRecord.amount,
+        orderBumps,
+        payment: updatedPayment,
+        res, // Pass the response object
+      });
+    } else {
+      return await handleDigitalProductPayment({
+        order_id,
+        payment_id: orderData.cf_payment_id,
+        gateway: "cashfree",
+        productId,
+        username: notes.username || paymentRecord.username,
+        email: notes.email || paymentRecord.email,
+        phone: notes.phone || paymentRecord.phone,
+        amount: paymentRecord.amount,
+        orderBumps,
+        payment: updatedPayment,
+        res, // Pass the response object
+      });
+    }
+  } catch (error) {
+    console.error("Cashfree payment verification error:", {
+      message: error.message,
+      stack: error.stack,
+      orderId: req.body.order_id,
+    });
+
+    try {
+      await coursePaymentHandler.logFailedPayment({
+        orderId: req.body.order_id,
+        productId: req.body.productId,
+        productType: paymentRecord?.type || req.body.type,
+        amount: paymentRecord?.amount || 0,
+        reason: error.message,
+        context: "payment_verification",
+        customer: paymentRecord
+          ? {
+              email: paymentRecord.email,
+              phone: paymentRecord.phone,
+              username: paymentRecord.username,
+            }
+          : null,
+        errorDetails: error.stack,
+      });
+
+      if (paymentRecord) {
+        await Payment.updateOne(
+          { orderId: req.body.order_id },
+          {
+            $set: {
+              status: "Failed",
+              failureReason: error.message,
+              errorDetails: error.stack,
+              updatedAt: new Date(),
+            },
+          }
+        );
+      }
+    } catch (logError) {
+      console.error("Failed to log failed payment:", logError);
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Payment processing failed",
+      error: error.message,
+      publicMessage:
+        "We encountered an issue verifying your payment. Please contact support.",
+    });
   }
 };
 
+// Utility function (keep at bottom of file)
 const hash = (data) => {
   return crypto.createHash("sha256").update(data).digest("hex");
 };
-
 const getPayments = async (req, res) => {
   try {
     const paymentData = await Payment.find();
@@ -1510,9 +1575,10 @@ const SaleVerifyRazorpayPayment = async (req, res) => {
 
     if (paymentRecord.productType === "Course") {
       return await coursePaymentHandler.handleCoursePayment({
-        razorpay_order_id,
-        razorpay_payment_id,
-        courseId: productId,
+        order_id: razorpay_order_id, // matches handleCoursePayment parameter name
+        payment_id: razorpay_payment_id,
+        productId: productId, // changed from courseId to productId
+        gateway: "razorpay",
         username: notes.username || paymentRecord.username,
         email: notes.email || paymentRecord.email,
         phone: notes.phone || paymentRecord.phone,

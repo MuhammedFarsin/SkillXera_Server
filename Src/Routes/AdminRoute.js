@@ -52,7 +52,7 @@ const {
   getFailedPayments,
   reconcilePayments,
   retryFailedPayment,
-  getPaymentDetails
+  getPaymentDetails,
 } = require("../Controller/PaymentAdminController");
 
 const {
@@ -80,8 +80,7 @@ const {
 } = require("../Controller/SaleController");
 
 // Dashboard
-adminRoute.get("/dashboard", dashboard);
-// Get all courses...
+adminRoute.get("/dashboard", authenticateAccessToken, isAdmin, dashboard);
 
 adminRoute.get(
   "/assets/get-courses",
@@ -141,6 +140,7 @@ adminRoute.get(
 adminRoute.get(
   "/assets/get-sales-page/:type/:id",
   authenticateAccessToken,
+  isAdmin,
   GetSalesPage
 );
 
@@ -334,6 +334,7 @@ adminRoute.put(
 adminRoute.get(
   "/assets/file/check-sales-page/digital-product/:id",
   authenticateAccessToken,
+  isAdmin,
   CheckSalesPage
 );
 //Contacts...
