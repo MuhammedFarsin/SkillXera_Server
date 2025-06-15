@@ -554,11 +554,8 @@ const SaleCreateCashfreeOrder = async (req, res) => {
            return_url: `${req.body.return_url}`
         },
         order_note: JSON.stringify({
-          username,
           email,
-          phone,
           productId,
-          type,
           orderBumps: orderBumps || [],
         }),
       },

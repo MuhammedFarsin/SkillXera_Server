@@ -29,6 +29,7 @@ const handleCoursePayment = async ({
      console.log('this is orderid',order_id)
     console.log('this is productId',productId)
     console.log('this is the email',email)
+    console.log('this is the order bumps',orderBumps)
     console.log('this is payment',payment)
     // Validate required parameters
     if (!order_id || !productId || !email || !payment) {
@@ -278,30 +279,48 @@ const handleCoursePayment = async ({
 async function processCourseOrderBumps(orderBumps) {
   const processedBumps = [];
 
-  for (const bumpId of orderBumps) {
-    const bump = await OrderBump.findById(bumpId).populate("bumpProduct");
-    if (!bump) {
-      console.warn(`Order bump ${bumpId} not found`);
+  for (const bump of orderBumps) {
+    let bumpData;
+
+    // Case 1: if bump is a string or ObjectId → treat it as bump ID
+    if (typeof bump === 'string' || bump instanceof require('mongoose').Types.ObjectId) {
+      bumpData = await OrderBump.findById(bump).populate("bumpProduct");
+      if (!bumpData) {
+        console.warn(`Order bump ${bump} not found`);
+        continue;
+      }
+    }
+
+    // Case 2: if bump is an object → assume it contains productId etc.
+    else if (typeof bump === 'object' && bump.productId) {
+      bumpData = await OrderBump.findOne({ bumpProduct: bump.productId }).populate("bumpProduct");
+      if (!bumpData) {
+        console.warn(`Order bump for product ${bump.productId} not found`);
+        continue;
+      }
+    } else {
+      console.warn(`Invalid bump format: ${JSON.stringify(bump)}`);
       continue;
     }
 
-    if (!bump.bumpProduct) {
-      throw new Error(`Bump product not found for order bump ${bumpId}`);
+    if (!bumpData.bumpProduct) {
+      throw new Error(`Bump product not found for bump ${bumpData._id}`);
     }
 
     processedBumps.push({
-      bumpId: bump._id,
-      productId: bump.bumpProduct._id,
-      title: bump.displayName,
-      amount: bump.bumpPrice,
-      fileUrl: bump.bumpProduct.fileUrl || undefined,
-      externalUrl: bump.bumpProduct.externalUrl || undefined,
-      contentType: bump.bumpProduct.fileUrl ? "file" : "link",
+      bumpId: bumpData._id,
+      productId: bumpData.bumpProduct._id,
+      title: bumpData.displayName,
+      amount: bumpData.bumpPrice,
+      fileUrl: bumpData.bumpProduct.fileUrl || undefined,
+      externalUrl: bumpData.bumpProduct.externalUrl || undefined,
+      contentType: bumpData.bumpProduct.fileUrl ? "file" : "link",
     });
   }
 
   return processedBumps;
 }
+
 
 // Log failed payment (unchanged)
 const logFailedPayment = async (data) => {
