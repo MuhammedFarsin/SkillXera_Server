@@ -282,7 +282,6 @@ async function processCourseOrderBumps(orderBumps) {
   for (const bump of orderBumps) {
     let bumpData;
 
-    // Case 1: if bump is a string or ObjectId → treat it as bump ID
     if (typeof bump === 'string' || bump instanceof require('mongoose').Types.ObjectId) {
       bumpData = await OrderBump.findById(bump).populate("bumpProduct");
       if (!bumpData) {
@@ -291,7 +290,6 @@ async function processCourseOrderBumps(orderBumps) {
       }
     }
 
-    // Case 2: if bump is an object → assume it contains productId etc.
     else if (typeof bump === 'object' && bump.productId) {
       bumpData = await OrderBump.findOne({ bumpProduct: bump.productId }).populate("bumpProduct");
       if (!bumpData) {
@@ -325,43 +323,53 @@ async function processCourseOrderBumps(orderBumps) {
 // Log failed payment (unchanged)
 const logFailedPayment = async (data) => {
   try {
+    // Define valid values based on your schema
+    const validGateways = ['razorpay', 'cashfree', 'other'];
     const validContexts = [
-      "payment_processing",
-      "order_verification",
-      "user_creation",
-      "email_sending",
-      "order_bump",
-      "course_not_found",
-      "database_error",
-      "other",
+      'payment_processing',
+      'order_verification',
+      'refund_processing',
+      'user_creation',
+      'email_sending',
+      'order_bump',
+      'database_error',
+      'gateway_error',
+      'other'
     ];
 
-    const validatedContext = validContexts.includes(data.context)
-      ? data.context
-      : "other";
-
-    const failedPayment = {
+    // Normalize the input data
+    const normalizedData = {
       orderId: data.orderId || "unknown",
-      razorpayPaymentId: data.razorpayPaymentId || "",
-      productId: data.productId || null,
-      productType: "Course", // Force to Course
+      gateway: validGateways.includes(data.gateway) ? data.gateway : 'other',
+      gatewayPaymentId: data.paymentId || "",
+      gatewayOrderId: data.orderId || "",
+      productId: data.productId,
+      productType: data.productType || "Course",
       amount: data.amount || 0,
-      error: data.error?.message || String(data.error || "Unknown error"),
+      status: "Failed",
+      gatewayStatus: data.error?.gatewayStatus || 
+                   (data.reason?.includes('status:') ? 
+                    data.reason.split('status:')[1].trim() : undefined),
+      error: data.error?.message || data.reason || "Unknown error",
+      errorCode: data.error?.code,
+      errorDescription: data.error?.description || data.reason,
       stackTrace: data.error?.stack || new Error().stack,
-      context: validatedContext,
-      paymentData: data.paymentData || {},
+      context: validContexts.includes(data.context) ? data.context : 'other',
       customer: {
         email: data.customer?.email || data.email,
         phone: data.customer?.phone || data.phone,
         username: data.customer?.username || data.username,
-        userId: data.customer?.userId || null,
+        userId: data.customer?.userId,
       },
+      paymentData: data.paymentData || {},
+      gatewayResponse: data.error?.gatewayResponse,
+      gatewayError: data.error?.gatewayError,
     };
 
-    await FailedPayment.create(failedPayment);
+    await FailedPayment.create(normalizedData);
   } catch (err) {
     console.error("CRITICAL: Failed to save failed payment:", err);
-    console.error("Failure details:", JSON.stringify(data, null, 2));
+    console.error("Original failure data:", JSON.stringify(data, null, 2));
   }
 };
 

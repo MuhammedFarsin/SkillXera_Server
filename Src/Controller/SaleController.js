@@ -653,11 +653,7 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
     console.log(req.body);
 
     // Basic validation
-    if (
-      !order_id ||
-      !productId ||
-      !["course", "digitalProduct"].includes(type)
-    ) {
+    if (!order_id || !productId || !["course", "digitalProduct"].includes(type)) {
       return res.status(400).json({
         success: false,
         message: "Missing required payment details",
@@ -683,83 +679,119 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
     const paymentStatus = orderData?.order_status;
     const isPaymentSuccess = paymentStatus === "PAID";
 
-      console.log('Cashfree order data:', {
-      order_amount: orderData.order_amount,
-      order_status: orderData.order_status,
-      order_currency: orderData.order_currency
-    });
+    let isCaptured = false;
+    let captureDetails = null;
+    try {
+      const paymentsResponse = await axios.get(
+        `https://sandbox.cashfree.com/pg/orders/${order_id}/payments`,
+        {
+          headers: {
+            accept: "application/json",
+            "x-client-id": process.env.CASHFREE_CLIENT_ID,
+            "x-client-secret": process.env.CASHFREE_CLIENT_SECRET,
+            "x-api-version": "2022-09-01",
+          },
+        }
+      );
+      isCaptured = paymentsResponse.data.some(p => p.payment_status === 'SUCCESS');
+      if (isCaptured) {
+        captureDetails = paymentsResponse.data.find(p => p.payment_status === 'SUCCESS');
+      }
+    } catch (e) {
+      console.error("Error checking payment capture status:", e);
+    }
 
-    // 3. Verify payment status
-    if (!isPaymentSuccess) {
+    // Handle captured but failed verification
+    if (isCaptured && !isPaymentSuccess) {
       await Payment.updateOne(
         { orderId: order_id },
         {
           $set: {
-            status: "Failed",
-            failureReason: `Payment not completed (status: ${paymentStatus})`,
+            status: "CapturedButFailed",
+            capturedAt: new Date(),
+            failureReason: "Payment captured but verification failed",
+            requiresReconciliation: true,
             updatedAt: new Date(),
           },
         }
       );
 
-      await coursePaymentHandler.logFailedPayment({
+      await logFailedPayment({
         orderId: order_id,
+        gateway: 'cashfree',
+        paymentId: captureDetails?.cf_payment_id,
         productId,
-        productType: paymentRecord.type,
+        productType: type === 'course' ? 'course' : 'digitalProduct',
         amount: paymentRecord.amount,
-        reason: `Payment not completed (status: ${paymentStatus})`,
-        context: "payment_status_check",
+        error: new Error(`Payment captured but verification failed. Status: ${paymentStatus}`),
+        context: "order_verification",
         customer: {
           email: paymentRecord.email,
           phone: paymentRecord.phone,
           username: paymentRecord.username,
         },
+        paymentData: {
+          originalStatus: paymentStatus,
+          isCaptured: true,
+          capturedAmount: paymentRecord.amount,
+          gatewayResponse: orderData,
+          captureDetails,
+        },
       });
 
       return res.status(400).json({
         success: false,
-        message: `Payment not completed (status: ${paymentStatus})`,
+        status: "captured_but_failed",
+        message: "Payment received but processing failed. Support has been notified.",
+        contactSupport: true,
       });
     }
 
-    // 4. Verify amount matches
+    // Verify amount matches
     if (orderData.order_amount !== paymentRecord.amount) {
       await Payment.updateOne(
         { orderId: order_id },
         {
           $set: {
-            status: "Failed",
-            failureReason: `Amount mismatch (expected ${
-              paymentRecord.amount
-            }, got ${orderData.order_amount / 100})`,
+            status: isCaptured ? "CapturedButFailed" : "Failed",
+            failureReason: `Amount mismatch (expected ${paymentRecord.amount}, got ${orderData.order_amount})`,
+            requiresReconciliation: isCaptured,
             updatedAt: new Date(),
           },
         }
       );
 
-      await coursePaymentHandler.logFailedPayment({
+      await logFailedPayment({
         orderId: order_id,
+        gateway: 'cashfree',
+        paymentId: captureDetails?.cf_payment_id,
         productId,
-        productType: paymentRecord.type,
+        productType: type === 'course' ? 'course' : 'digitalProduct',
         amount: paymentRecord.amount,
-        reason: `Amount mismatch (expected ${paymentRecord.amount}, got ${
-          orderData.order_amount
-        })`,
+        error: new Error(`Amount mismatch (expected ${paymentRecord.amount}, got ${orderData.order_amount})`),
         context: "amount_verification",
         customer: {
           email: paymentRecord.email,
           phone: paymentRecord.phone,
           username: paymentRecord.username,
         },
+        paymentData: {
+          isCaptured,
+          expectedAmount: paymentRecord.amount,
+          receivedAmount: orderData.order_amount,
+          gatewayResponse: orderData,
+          captureDetails,
+        },
       });
 
       return res.status(400).json({
         success: false,
         message: "Payment amount mismatch",
+        requiresReconciliation: isCaptured,
       });
     }
 
-    // 5. Parse order notes
+    // Parse order notes
     let notes = {};
     try {
       if (orderData.order_note) {
@@ -780,7 +812,7 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
     }
     const orderBumps = notes.orderBumps || [];
 
-    // 6. Update payment record
+    // Update payment record
     const updatedPayment = await Payment.findOneAndUpdate(
       { orderId: order_id },
       {
@@ -798,7 +830,6 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
       { new: true }
     );
 
-    // 7. Handle fulfillment - IMPORTANT: Return the promise chain
     if (paymentRecord.productType === "Course") {
       return await coursePaymentHandler.handleCoursePayment({
         order_id,
@@ -811,7 +842,7 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
         amount: paymentRecord.amount,
         orderBumps,
         payment: updatedPayment,
-        res, // Pass the response object
+        res,
       });
     } else {
       return await handleDigitalProductPayment({
@@ -825,7 +856,7 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
         amount: paymentRecord.amount,
         orderBumps,
         payment: updatedPayment,
-        res, // Pass the response object
+        res,
       });
     }
   } catch (error) {
@@ -835,40 +866,68 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
       orderId: req.body.order_id,
     });
 
+    let isCaptured = false;
+    let captureDetails = null;
     try {
-      await coursePaymentHandler.logFailedPayment({
-        orderId: req.body.order_id,
-        productId: req.body.productId,
-        productType: paymentRecord?.type || req.body.type,
-        amount: paymentRecord?.amount || 0,
-        reason: error.message,
-        context: "payment_verification",
-        customer: paymentRecord
-          ? {
-              email: paymentRecord.email,
-              phone: paymentRecord.phone,
-              username: paymentRecord.username,
-            }
-          : null,
-        errorDetails: error.stack,
-      });
-
-      if (paymentRecord) {
-        await Payment.updateOne(
-          { orderId: req.body.order_id },
-          {
-            $set: {
-              status: "Failed",
-              failureReason: error.message,
-              errorDetails: error.stack,
-              updatedAt: new Date(),
-            },
-          }
-        );
+      const paymentsResponse = await axios.get(
+        `https://sandbox.cashfree.com/pg/orders/${req.body.order_id}/payments`,
+        {
+          headers: {
+            accept: "application/json",
+            "x-client-id": process.env.CASHFREE_CLIENT_ID,
+            "x-client-secret": process.env.CASHFREE_CLIENT_SECRET,
+            "x-api-version": "2022-09-01",
+          },
+        }
+      );
+      isCaptured = paymentsResponse.data.some(p => p.payment_status === 'SUCCESS');
+      if (isCaptured) {
+        captureDetails = paymentsResponse.data.find(p => p.payment_status === 'SUCCESS');
       }
-    } catch (logError) {
-      console.error("Failed to log failed payment:", logError);
+    } catch (e) {
+      console.error("Final capture check failed:", e);
     }
+
+    if (isCaptured) {
+      await Payment.updateOne(
+        { orderId: req.body.order_id },
+        {
+          $set: {
+            status: "CapturedButErrored",
+            capturedAt: new Date(),
+            failureReason: error.message,
+            requiresReconciliation: true,
+            updatedAt: new Date(),
+          },
+        }
+      );
+    }
+
+    await logFailedPayment({
+      orderId: req.body.order_id,
+      gateway: 'cashfree',
+      paymentId: captureDetails?.cf_payment_id,
+      productId: req.body.productId,
+      productType: req.body.type === 'course' ? 'course' : 'digitalProduct',
+      amount: paymentRecord?.amount || req.body.amount,
+      error: error,
+      context: isCaptured ? "captured_but_errored" : "payment_verification",
+      customer: paymentRecord
+        ? {
+            email: paymentRecord.email,
+            phone: paymentRecord.phone,
+            username: paymentRecord.username,
+          }
+        : {
+            email: req.body.email,
+            phone: req.body.phone,
+          },
+      paymentData: {
+        isCaptured,
+        captureDetails,
+        errorDetails: error.stack,
+      },
+    });
 
     return res.status(500).json({
       success: false,
@@ -876,11 +935,11 @@ const SaleVerifyCashfreeOrder = async (req, res) => {
       error: error.message,
       publicMessage:
         "We encountered an issue verifying your payment. Please contact support.",
+      requiresReconciliation: isCaptured,
     });
   }
 };
 
-// Utility function (keep at bottom of file)
 const hash = (data) => {
   return crypto.createHash("sha256").update(data).digest("hex");
 };
